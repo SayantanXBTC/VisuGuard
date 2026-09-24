@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ShieldCheck, Menu, X, CheckCircle2 } from 'lucide-react';
 import { APP_NAME } from '../config.js';
 import Panel, { PANELS } from '../components/landing/Panels.jsx';
+import { useEdithGreeting } from '../edith-bus.js';
 
 const NAV_LINKS = PANELS.filter((panel) => panel.id !== 'hero');
 
@@ -48,6 +49,12 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
   const [menuOpen, setMenuOpen] = useState(false);
   const [showNotice, setShowNotice] = useState(Boolean(notice));
   const scrollRef = useRef(null);
+
+  useEdithGreeting(
+    { once: 'welcome', title: "Welcome! I'm Edith.", text: "If you need any help, I'm right here." },
+    true,
+    1400,
+  );
 
   useEffect(() => {
     if (!notice) return;

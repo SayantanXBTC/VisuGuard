@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Trash2 } from 'lucide-react';
 import { getTest, captureBaseline, captureCurrent, analyzeTest, retryAi, listComparisons, getComparison } from '../api.js';
 import { capturedPages, formatDate, isRunning } from '../helpers.js';
@@ -9,8 +9,44 @@ import ComparisonHistory from '../components/ComparisonHistory.jsx';
 import ComparisonReport from '../components/ComparisonReport.jsx';
 import Stepper from '../components/Stepper.jsx';
 import { Button, ErrorState, SkeletonRows, StatusBadge } from '../components/ui.jsx';
+import { edithSay, useEdithGreeting } from '../edith-bus.js';
 
 const POLL_INTERVAL_MS = 1500;
+const READ_REPORT = 'How do I read the report?';
+const FIRST_REPORT_KEY = 'edith-first-report';
+
+// True only the very first time this browser sees a finished report (localStorage, so it survives sessions)
+function isFirstReportEver() {
+  try {
+    if (localStorage.getItem(FIRST_REPORT_KEY) === '1') return false;
+    localStorage.setItem(FIRST_REPORT_KEY, '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// What Edith says when a job she watched you start finishes (or fails). Only live transitions count:
+// opening a test that was already finished never triggers these.
+function reactToStatus(previous, test) {
+  if (!isRunning(previous) || isRunning(test.status)) return;
+
+  if (test.status === 'completed') {
+    const pages = test.results?.pages || [];
+    const changed = pages.filter((page) => page.status === 'changed').length;
+    const compared = changed + pages.filter((page) => page.status === 'unchanged').length;
+    if (isFirstReportEver()) {
+      edithSay({ title: 'Your first report is ready!', text: 'That was the whole pipeline, start to finish. Want a quick tour of it?', ask: READ_REPORT, celebrate: true });
+    } else {
+      edithSay({ title: "Your report's ready!", text: `${changed} of ${compared} pages changed. Want me to walk you through it?`, ask: READ_REPORT });
+    }
+  } else if (test.status === 'baseline_captured') {
+    edithSay({ title: 'Baseline saved!', text: 'Now point me at the new deployment and I\'ll compare the same pages.' });
+  } else if (test.status === 'failed') {
+    const step = previous === 'analyzing' ? 'analysis' : 'capture';
+    edithSay({ title: 'That one didn\'t go through.', text: `The ${step} failed. Want to know the usual reasons?`, ask: `Why would a ${step} fail?` });
+  }
+}
 
 // Details of one test: baseline, current capture, analysis, the report, and older comparisons of the same baseline.
 function TestDetail({ testId, notice, onBack, onDelete }) {
@@ -55,6 +91,26 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
       ignore = true;
     };
   }, [testId, reloadKey]);
+
+  // Edith reacts to jobs finishing while you watch. The first status seen (on load) is only remembered.
+  const lastStatus = useRef(null);
+  useEffect(() => {
+    if (!test) return;
+    if (lastStatus.current && lastStatus.current !== test.status) reactToStatus(lastStatus.current, test);
+    lastStatus.current = test.status;
+  }, [test]);
+
+  // First look at a fresh test or a finished report, once per session each
+  const firstStatus = useRef(null);
+  if (test && !firstStatus.current) firstStatus.current = test.status;
+  useEdithGreeting(
+    { once: 'test-created', title: 'Next step: Capture Baseline.', text: "I'll crawl the site and screenshot every page I find, up to 10." },
+    firstStatus.current === 'created',
+  );
+  useEdithGreeting(
+    { once: 'report', title: 'This is your report.', text: 'Click any screenshot to enlarge it, or switch to the slider to compare.', ask: READ_REPORT },
+    firstStatus.current === 'completed',
+  );
 
   // The list of older comparisons
   function loadComparisons() {

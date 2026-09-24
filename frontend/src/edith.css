@@ -122,6 +122,37 @@
   line-height: 1.4;
 }
 
+.edith-bubble em {
+  margin-top: 4px;
+  color: #ffc4ad;
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.edith-hop-wrap {
+  position: relative;
+  display: flex;
+}
+
+/* The little burst when she celebrates (first report ready) */
+.edith-spark {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff3ea 0%, #ff9d6e 60%, transparent 100%);
+  box-shadow: 0 0 10px rgba(255, 150, 100, 0.9);
+  pointer-events: none;
+}
+
+.edith-spark:nth-child(3n) {
+  background: radial-gradient(circle, #fff 0%, #ffd27a 60%, transparent 100%);
+}
+
 .edith-bubble:hover {
   border-color: rgba(255, 196, 173, 0.5);
 }

@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import AuthCard from '../components/AuthCard.jsx';
 import SmokeyBackground from '../components/SmokeyBackground.jsx';
+import { useEdithGreeting } from '../edith-bus.js';
 import '../auth.css';
 
 // The sign in / sign up screen: an animated background with a glass card on top.
@@ -8,6 +9,12 @@ import '../auth.css';
 // page the user came from, then the card fades in. Without it (no page underneath) the screen simply fades in.
 function Auth({ mode, onBack, reveal }) {
   const style = reveal ? { '--reveal-x': `${reveal.x}px`, '--reveal-y': `${reveal.y}px` } : undefined;
+
+  useEdithGreeting(
+    { once: 'auth', title: 'Quickest way in?', text: 'Continue with Google. One click, no password to remember.' },
+    true,
+    1800,
+  );
 
   return (
     <main className={reveal ? 'auth-stage auth-stage-reveal' : 'auth-stage auth-stage-fade'} style={style}>

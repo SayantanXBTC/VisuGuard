@@ -8,6 +8,8 @@ import TestForm from '../components/TestForm.jsx';
 import TestHistory from '../components/TestHistory.jsx';
 import DeleteDialog from '../components/DeleteDialog.jsx';
 import TestDetail from './TestDetail.jsx';
+import DashboardHero from '../components/DashboardHero.jsx';
+import { useEdithGreeting } from '../edith-bus.js';
 import { listTests, deleteTest } from '../api.js';
 import { isRunning } from '../helpers.js';
 import '../app.css';
@@ -118,6 +120,22 @@ function Dashboard({ user, onLogout }) {
     { icon: Eye, label: 'Changes found', value: changesFound },
   ];
 
+  // Edith's once-per-session hello for each screen. Home waits for the list, so she knows if you're new.
+  useEdithGreeting(
+    tests.length === 0
+      ? { once: 'dashboard', title: 'Ready for your first test?', text: "Hit New Test. No site handy? There's a demo one waiting for you." }
+      : { once: 'dashboard', title: 'Welcome back!', text: `You have ${tests.length} ${tests.length === 1 ? 'test' : 'tests'} here. Shout if you need a hand.` },
+    view === 'home' && !loadingTests && !testsError,
+  );
+  useEdithGreeting(
+    { once: 'new-test', title: 'Pick a site to watch.', text: "No site handy? The demo baseline below is a real site with real changes to catch." },
+    view === 'newTest',
+  );
+  useEdithGreeting(
+    { once: 'history', title: 'Everything you ran lives here.', text: 'Open any test to see its report again, or compare another deployment.' },
+    view === 'history' && !loadingTests && tests.length > 0,
+  );
+
   // Each screen fades and rises in
   const page = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.2, 0.7, 0.2, 1] } }, exit: { opacity: 0, y: -4, transition: { duration: 0.12 } } };
 
@@ -136,12 +154,13 @@ function Dashboard({ user, onLogout }) {
         <AnimatePresence mode="wait">
           {view === 'home' && (
             <motion.div key="home" className="content" {...page}>
-              <header className="page-head">
-                <div>
+              <header className="page-head dash-hero">
+                <div className="dash-hero-text">
                   <h1>Visual Regression Testing</h1>
                   <p className="page-lead">Capture an approved website and compare future deployments against it.</p>
+                  <Button variant="primary" size="lg" icon={Plus} onClick={startNewTest}>New Test</Button>
                 </div>
-                <Button variant="primary" size="lg" icon={Plus} onClick={startNewTest}>New Test</Button>
+                <DashboardHero />
               </header>
 
               {tests.length > 0 && (
