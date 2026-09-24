@@ -8,6 +8,7 @@ import AnalysisPanel from '../components/AnalysisPanel.jsx';
 import ComparisonHistory from '../components/ComparisonHistory.jsx';
 import ComparisonReport from '../components/ComparisonReport.jsx';
 import Stepper from '../components/Stepper.jsx';
+import RunSummary from '../components/RunSummary.jsx';
 import { Button, ErrorState, SkeletonRows, StatusBadge } from '../components/ui.jsx';
 import { edithBusy, edithSay, useEdithGreeting } from '../edith-bus.js';
 
@@ -314,7 +315,7 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
             </p>
           )}
 
-          <Stepper test={test} />
+          {!showReport && !viewing && <Stepper test={test} />}
 
           {viewing ? (
             // An older, saved report. Nothing is recomputed.
@@ -329,8 +330,11 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
             </>
           ) : (
             <>
-              {/* One connected workflow: baseline, then the current deployment, then the analysis */}
-              <div className={showReport ? 'flow flow-compact' : 'flow'}>
+              {/* Done: one sentence about the run. Otherwise the connected workflow: baseline, current, analysis */}
+              {showReport ? (
+                <RunSummary test={test} />
+              ) : (
+              <div className="flow">
                 <BaselineCapture
                   test={test}
                   starting={starting}
@@ -365,6 +369,7 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
                   />
                 )}
               </div>
+              )}
 
               {showReport && (
                 <ComparisonReport

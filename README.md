@@ -6,7 +6,7 @@
 
 - Full-page screenshots of every page, captured with Playwright
 - Pixel-by-pixel comparison with Resemble.js (a page counts as changed above **0.1%** of pixels)
-- Readable diff images: changed pixels tinted red, amber boxes around each change
+- Readable diff images: the page is dimmed and every changed area is spotlighted in a numbered red box
 - Optional AI findings per changed page: summary, severity, categories, observations
 - Interactive report with a before/after slider, comparison history and PDF export
 - **Edith**, a built-in chat assistant (Anthropic Claude) that answers questions about the app
@@ -70,7 +70,7 @@ flowchart TD
     A["1. Create test<br/>enter baseline URL"] --> B["2. Capture baseline<br/>Playwright crawls same-site links,<br/>full-page screenshot of each page (max 10)"]
     B --> C["3. Capture and compare<br/>enter current URL: the SAME page paths<br/>are captured on the new site"]
     C --> D["4. Pixel comparison<br/>Resemble.js per page pair<br/>over 0.1% different = changed"]
-    D --> E["5. Diff images<br/>current page, changes tinted red and boxed"]
+    D --> E["5. Diff images<br/>page dimmed, changed areas boxed and numbered"]
     E --> F{"AI key set?"}
     F -- yes --> G["6. AI findings for changed pages<br/>summary, severity, categories"]
     F -- no --> H["Report without AI text"]
@@ -269,7 +269,7 @@ Expected result (values can differ slightly by machine because of fonts):
 
 **Current capture.** No crawling. VisuGuard visits the *same paths* the baseline found, on the new host. A page that redirects elsewhere or does not exist is reported as unavailable, never silently skipped.
 
-**Comparison.** Resemble.js compares each baseline/current pair (anti-aliasing ignored). A page is `changed` when more than 0.1% of pixels differ. For changed pages, the current screenshot is tinted red where pixels differ, and nearby changes are grouped into amber boxes.
+**Comparison.** Resemble.js compares each baseline/current pair (anti-aliasing ignored). A page is `changed` when more than 0.1% of pixels differ. For changed pages, the diff image shows the current page dimmed to grey, with nearby changes merged into areas that are shown in full colour inside numbered red boxes.
 
 **AI findings (optional).** For each changed page, a vision model receives the baseline, the current screenshot and the diff image, and returns a validated summary, severity (low to critical), categories, observations and a confidence value. The AI never decides whether a page changed. Without a key, the report says so and everything else works.
 

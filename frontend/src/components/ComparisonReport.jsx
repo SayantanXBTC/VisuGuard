@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
-import { AlertTriangle, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Download, GitCompareArrows, Maximize2, RotateCw, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronLeft, ChevronRight, Download, GitCompareArrows, Maximize2, RotateCw, Sparkles, X } from 'lucide-react';
 import { downloadPdf } from '../api.js';
 import { formatDate, hostOf } from '../helpers.js';
 import CompareSlider from './CompareSlider.jsx';
@@ -63,49 +63,6 @@ function Segmented({ id, label, options, value, onChange }) {
           <span className="seg-text">{text}{count !== undefined && <em>{count}</em>}</span>
         </button>
       ))}
-    </div>
-  );
-}
-
-// Changed / unchanged / unavailable as a ring that draws itself
-function StatusDonut({ changed, unchanged, unavailable }) {
-  const total = Math.max(1, changed + unchanged + unavailable);
-  const R = 34;
-  const C = 2 * Math.PI * R;
-  const parts = [
-    { key: 'changed', value: changed, className: 'donut-changed' },
-    { key: 'unchanged', value: unchanged, className: 'donut-unchanged' },
-    { key: 'unavailable', value: unavailable, className: 'donut-unavailable' },
-  ];
-  let offset = 0;
-  return (
-    <div className="donut">
-      <svg viewBox="0 0 84 84" aria-hidden="true">
-        <circle cx="42" cy="42" r={R} className="donut-track" />
-        {parts.map((part, n) => {
-          const length = (part.value / total) * C;
-          const start = offset;
-          offset += length;
-          if (!part.value) return null;
-          return (
-            <motion.circle
-              key={part.key}
-              cx="42"
-              cy="42"
-              r={R}
-              className={part.className}
-              strokeDashoffset={-start}
-              initial={{ strokeDasharray: `0 ${C}` }}
-              animate={{ strokeDasharray: `${Math.max(0, length - 1.5)} ${C}` }}
-              transition={{ duration: 0.9, delay: 0.35 + n * 0.25, ease: EASE }}
-            />
-          );
-        })}
-      </svg>
-      <div className="donut-center">
-        <strong><CountUp value={changed} delay={0.3} /></strong>
-        <span>of {changed + unchanged} changed</span>
-      </div>
     </div>
   );
 }
@@ -261,7 +218,7 @@ function PageDetail({ page, view, onView, onOpen, position, total, onPrev, onNex
   const shown = {
     baseline: <Frame label="Baseline" src={page.baseline} onOpen={onOpen} />,
     current: <Frame label="Current" src={page.current} onOpen={onOpen} />,
-    diff: <Frame label="Diff (changes tinted red and boxed)" src={page.diff} onOpen={onOpen} />,
+    diff: <Frame label="Changes (numbered in red)" src={page.diff} onOpen={onOpen} />,
     slider: <CompareSlider before={page.baseline} after={page.current} />,
     all: (
       <div className="frames-three">
@@ -284,7 +241,7 @@ function PageDetail({ page, view, onView, onOpen, position, total, onPrev, onNex
           {compared ? (
             <>
               <strong><CountUp value={page.mismatchPercentage} decimals={2} suffix="%" /></strong>
-              <span>of pixels differ</span>
+              <span>{page.changedAreas ? `in ${page.changedAreas} ${page.changedAreas === 1 ? 'area' : 'areas'}` : 'of pixels differ'}</span>
               <span className="meter meter-lg">
                 <motion.span initial={{ scaleX: 0 }} animate={{ scaleX: Math.min(1, Math.max(0.02, page.mismatchPercentage / 100)) }} transition={{ duration: 0.9, ease: EASE }} />
               </span>
@@ -383,6 +340,16 @@ function ComparisonReport({ baselineUrl, currentUrl, results, pdfPath, onCompare
   const compared = changed + unchanged;
   const unavailable = pages.length - compared;
   const largest = pages.reduce((max, page) => (page.status === 'changed' && page.mismatchPercentage > max ? page.mismatchPercentage : max), 0);
+  const largestPage = pages.find((page) => page.status === 'changed' && page.mismatchPercentage === largest);
+  const unchangedPaths = pages.filter((page) => page.status === 'unchanged').map((page) => page.path);
+  const context = [
+    changed > 0 && largestPage && `The biggest shift is on ${largestPage.path} (${largest.toFixed(1)}%).`,
+    changed === 0 && `Every page is within ${results.threshold}% of the baseline.`,
+    changed > 0 && unchangedPaths.length === 1 && `${unchangedPaths[0]} is untouched.`,
+    changed > 0 && unchangedPaths.length > 1 && `${unchangedPaths.length} pages are untouched.`,
+    unavailable > 0 && `${unavailable} ${unavailable === 1 ? "page couldn't" : "pages couldn't"} be captured.`,
+    changed > 0 && `Anything past ${results.threshold}% counts as a change.`,
+  ].filter(Boolean).join(' ');
   // Changed pages where the AI failed or timed out: worth asking again (nothing is captured or compared again)
   const canRetryAi = Boolean(onRetryAi) && pages.some((page) => page.status === 'changed' && page.ai_analysis && page.ai_analysis.status !== 'done' && page.ai_analysis.reason !== 'not_configured');
 
@@ -393,6 +360,7 @@ function ComparisonReport({ baselineUrl, currentUrl, results, pdfPath, onCompare
 
   function select(page) {
     if (!page || page.index === current?.index) return;
+    if (!visiblePages.includes(page)) setFilter('all');
     setDirection(visiblePages.indexOf(page) > visiblePages.indexOf(current) ? 1 : -1);
     setSelected(page.index);
     if (window.innerWidth < 900) detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -415,54 +383,61 @@ function ComparisonReport({ baselineUrl, currentUrl, results, pdfPath, onCompare
           <ReportIntro key="intro" pages={pages} onDone={endIntro} />
         ) : (
           <motion.div key="body" className="report-body" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
-            <motion.header className="report-head panel" variants={rise}>
-              <div className="report-meta">
-                <div className="meta-item"><small>Baseline</small><span className="mono" title={baselineUrl}>{hostOf(baselineUrl)}</span></div>
-                <ArrowRight size={15} aria-hidden="true" className="meta-arrow" />
-                <div className="meta-item"><small>Compared with</small><span className="mono" title={currentUrl}>{hostOf(currentUrl)}</span></div>
-                {results.analyzedAt && <div className="meta-item"><small>Analyzed</small><span>{formatDate(results.analyzedAt)}</span></div>}
+            <motion.header className="mast panel" variants={rise}>
+              <div className="mast-top">
+                <span className="mast-route">
+                  <span className="mono" title={baselineUrl}>{hostOf(baselineUrl)}</span>
+                  <ArrowRight size={13} aria-hidden="true" />
+                  <span className="mono" title={currentUrl}>{hostOf(currentUrl)}</span>
+                  {results.analyzedAt && <span className="mast-date">{formatDate(results.analyzedAt)}</span>}
+                </span>
+                <div className="report-actions">
+                  <Button variant="primary" size="sm" icon={Download} onClick={exportPdf} loading={exporting}>Export PDF</Button>
+                  {canRetryAi && <Button size="sm" icon={RotateCw} onClick={retryAi} loading={retryingAi} disabled={exporting}>Retry analysis</Button>}
+                  {onCompareAnother && <Button size="sm" icon={GitCompareArrows} onClick={onCompareAnother} disabled={exporting || retryingAi}>Compare another URL</Button>}
+                </div>
               </div>
 
-              <div className="report-actions">
-                <Button variant="primary" size="sm" icon={Download} onClick={exportPdf} loading={exporting}>Export PDF</Button>
-                {canRetryAi && <Button size="sm" icon={RotateCw} onClick={retryAi} loading={retryingAi} disabled={exporting}>Retry analysis</Button>}
-                {onCompareAnother && <Button size="sm" icon={GitCompareArrows} onClick={onCompareAnother} disabled={exporting || retryingAi}>Compare another URL</Button>}
+              <h2 className="mast-title">
+                {changed > 0 ? (
+                  <><em><CountUp value={changed} delay={0.15} /></em> of {compared} {compared === 1 ? 'page' : 'pages'} changed</>
+                ) : (
+                  <>Nothing moved. All <em>{compared}</em> {compared === 1 ? 'page matches' : 'pages match'}.</>
+                )}
+              </h2>
+              <p className="mast-sub">{context}</p>
+
+              <div className="mast-strip" aria-label="Change per page">
+                {pages.map((page, n) => {
+                  const kind = kindOf(page);
+                  const height = kind === 'changed' ? 0.14 + 0.86 * Math.sqrt(page.mismatchPercentage / Math.max(largest, 0.01)) : kind === 'unchanged' ? 0.05 : 0;
+                  const label = kind === 'unavailable' ? 'not captured' : `${page.mismatchPercentage.toFixed(1)}%`;
+                  return (
+                    <button
+                      key={page.index}
+                      className={`strip-col strip-${kind}${page.index === current?.index ? ' strip-active' : ''}`}
+                      onClick={() => select(page)}
+                      title={`${page.path}: ${label}`}
+                      aria-label={`${page.path}, ${label}`}
+                    >
+                      <span className="strip-value">{label}</span>
+                      <span className="strip-bar">
+                        <motion.span
+                          className="strip-fill"
+                          initial={{ scaleY: 0 }}
+                          animate={{ scaleY: height }}
+                          transition={{ delay: 0.35 + n * 0.07, duration: 0.7, ease: EASE }}
+                        />
+                      </span>
+                      <span className="strip-label mono">{page.path}</span>
+                    </button>
+                  );
+                })}
               </div>
             </motion.header>
 
             {exportError && <p className="banner banner-error" role="alert">{exportError}</p>}
             {aiError && <p className="banner banner-error" role="alert">{aiError}</p>}
-
-            <motion.div className={`report-hero panel ${changed > 0 ? 'report-hero-changed' : 'report-hero-clean'}`} variants={rise}>
-              <div className="report-verdict">
-                <motion.span
-                  className="verdict-icon"
-                  initial={{ scale: 0, rotate: -30 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ delay: 0.25, type: 'spring', stiffness: 300, damping: 14 }}
-                >
-                  {changed > 0 ? <AlertTriangle size={22} aria-hidden="true" /> : <CheckCircle2 size={22} aria-hidden="true" />}
-                </motion.span>
-                <div>
-                  <h2>{changed > 0 ? 'Visual changes detected' : 'No visual changes detected'}</h2>
-                  <p>
-                    {changed > 0
-                      ? `${changed} of ${compared} compared ${compared === 1 ? 'page' : 'pages'} moved past the ${results.threshold}% threshold.`
-                      : `All ${compared} compared ${compared === 1 ? 'page matches' : 'pages match'} the baseline within ${results.threshold}%.`}
-                  </p>
-                </div>
-              </div>
-
-              <ul className="report-stats">
-                <li><b><CountUp value={compared} delay={0.2} /></b><span>compared</span></li>
-                <li className={changed > 0 ? 'stat-changed' : ''}><b><CountUp value={changed} delay={0.3} /></b><span>changed</span></li>
-                <li><b><CountUp value={unchanged} delay={0.4} /></b><span>unchanged</span></li>
-                <li><b><CountUp value={unavailable} delay={0.5} /></b><span>unavailable</span></li>
-                {largest > 0 && <li className="stat-changed"><b><CountUp value={largest} decimals={1} suffix="%" delay={0.6} /></b><span>largest change</span></li>}
-              </ul>
-
-              <StatusDonut changed={changed} unchanged={unchanged} unavailable={unavailable} />
-            </motion.div>
 
             <div className="report-split">
               <motion.aside className="report-rail panel" variants={rise}>

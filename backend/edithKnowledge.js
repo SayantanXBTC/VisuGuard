@@ -20,7 +20,7 @@ Workflow:
 2. Capture Baseline: Playwright opens the site in a headless browser and takes a full-page screenshot of every page it finds, up to 10 pages. The baseline is saved until the test is deleted and is never captured again.
 3. Capture & Compare: enter the URL of the new deployment (for example a staging site). VisuGuard captures the same pages that the baseline has, on the new URL, then compares automatically. Pages that do not exist on the new URL are reported as unavailable, not skipped silently.
 4. Analysis: each page pair is compared pixel by pixel with Resemble.js. A page counts as changed when more than 0.1% of its pixels differ.
-5. Report: shows pages compared, changed, unchanged and unavailable. Each page has its mismatch percentage and screenshots in five views: Baseline, Current, Diff, Slider (drag to reveal the difference) and All three. The Diff image shows the current page with changes tinted red and boxed. Click a screenshot or the enlarge button to see it full screen.
+5. Report: shows pages compared, changed, unchanged and unavailable. Each page has its mismatch percentage and screenshots in five views: Diff, Slider (drag to reveal the difference), Baseline, Current and Side by side. The Diff image dims the unchanged page to grey and shows every changed area in full colour inside a numbered red box. The report lists pages on the left; pick one to see it on the right. Click a screenshot or the enlarge button to see it full screen.
 
 Other features:
 - Export PDF: the report can be downloaded as a PDF from the report header.

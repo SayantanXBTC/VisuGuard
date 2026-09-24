@@ -153,7 +153,7 @@ function writeReport(doc, { testId, baselineUrl, currentUrl, results, generatedA
   // ---- One section per page ----
   for (const page of pages) {
     const hasImages = Boolean(page.baseline || page.current || page.diff);
-    const images = [['Baseline', page.baseline], ['Current', page.current], ['Diff (changes tinted red)', page.diff]];
+    const images = [['Baseline', page.baseline], ['Current', page.current], ['Diff (changed areas boxed in red)', page.diff]];
     const boxHeight = hasImages ? rowHeight(doc, testId, images.map(([, address]) => address)) : 0;
     const ai = aiSection(page);
     const neededHeight = (hasImages ? boxHeight + 110 : 120) + aiHeight(doc, ai); // 110 = the text above the images

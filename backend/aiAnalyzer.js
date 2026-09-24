@@ -22,7 +22,7 @@ const INSTRUCTIONS = `You compare two screenshots of the same web page: the appr
 You get three images, in this order:
 1. BASELINE screenshot.
 2. CURRENT screenshot.
-3. DIFF image made by a pixel comparison tool: it is the current screenshot with the pixels that differ tinted red, and amber boxes around each group of differences. Use it to find where to look. It is not a third version of the page.
+3. DIFF image made by a pixel comparison tool: the current screenshot shown dimmed and in grey, with every area that changed shown back in full colour inside a numbered red box. Use it to find where to look. It is not a third version of the page.
 
 Describe what visibly changed between the baseline and the current version: what moved, resized, appeared, disappeared, or changed text, color or spacing, and where on the page.
 
@@ -145,7 +145,7 @@ export async function analyzeVisualDifference({ testId, page }) {
     const files = [
       ['Image 1: BASELINE screenshot', fileOnDisk(testId, page.baseline)],
       ['Image 2: CURRENT screenshot', fileOnDisk(testId, page.current)],
-      ['Image 3: DIFF image (changed pixels tinted red, amber boxes around the changes)', fileOnDisk(testId, page.diff)],
+      ['Image 3: DIFF image (page dimmed to grey, changed areas in full colour inside numbered red boxes)', fileOnDisk(testId, page.diff)],
     ];
     if (files.some(([, file]) => !file)) throw new Error('A screenshot file is missing.');
 
