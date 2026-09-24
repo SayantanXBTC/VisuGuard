@@ -257,7 +257,7 @@ Expected result (values can differ slightly by machine because of fonts):
 | `/services` | Four cards in one column instead of two | changed, about 17% |
 | `/contact` | Bigger orange button | changed, about 1.6% |
 | `/team` | Identical | unchanged, 0% |
-| `/careers` | Not served by the changed site (404) | unavailable |
+| `/careers` | Longer job listing text, added a call-to-action button | changed, about 1.7% |
 
 ---
 
