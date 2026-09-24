@@ -38,15 +38,32 @@ function pathOf(href) {
 // so baseline/page-002.png and current/page-002.png are always the same page.
 const fileNameFor = (index) => `page-${String(index).padStart(3, '0')}.png`;
 
-// Short, readable text for the user. The full error goes to the server log.
+// An error whose text is already written for the user (we throw these ourselves)
+const pageError = (text) => Object.assign(new Error(text), { friendly: true });
+
+// Playwright / Chromium error codes -> plain words
+const NETWORK_ERRORS = [
+  ['ERR_NAME_NOT_RESOLVED', 'Unable to reach this website. Check that the address is correct.'],
+  ['ERR_CONNECTION_REFUSED', 'The website refused the connection. Check that it is running.'],
+  ['ERR_CONNECTION_RESET', 'The website closed the connection without answering.'],
+  ['ERR_CONNECTION_CLOSED', 'The website closed the connection without answering.'],
+  ['ERR_EMPTY_RESPONSE', 'The website closed the connection without answering.'],
+  ['ERR_CONNECTION_TIMED_OUT', 'The website did not answer in time.'],
+  ['ERR_TIMED_OUT', 'The website did not answer in time.'],
+  ['ERR_CERT', 'The website has an invalid security certificate.'],
+  ['ERR_SSL', 'The website has an invalid security certificate.'],
+  ['ERR_TOO_MANY_REDIRECTS', 'The page keeps redirecting and never loads.'],
+  ['ERR_ABORTED', 'The capture was interrupted. Please try again.'],
+  ['has been closed', 'The capture was interrupted. Please try again.'],
+];
+
+// Short, readable text for the user. The full error goes to the server log, never to the user.
 function describeError(error) {
   const message = error.message || String(error);
+  if (error.friendly) return message;
   if (message.includes('Timeout')) return 'The page took too long to load (over 30 seconds).';
-  if (message.includes('ERR_NAME_NOT_RESOLVED')) return 'The website address could not be found.';
-  if (message.includes('ERR_CONNECTION_REFUSED')) return 'The website refused the connection.';
-  if (message.includes('ERR_CERT')) return 'The website has an invalid security certificate.';
-  if (message.includes('ERR_ABORTED') || message.includes('has been closed')) return 'The capture was interrupted. Please try again.';
-  return message.split('\n')[0].slice(0, 200);
+  const known = NETWORK_ERRORS.find(([code]) => message.includes(code));
+  return known ? known[1] : 'The page could not be loaded.';
 }
 
 // Starts Chromium with the one viewport and timeouts used for every screenshot.
@@ -63,7 +80,10 @@ async function launchBrowser() {
 async function loadPage(page, url) {
   const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
   if (response && response.status() >= 400) {
-    throw new Error(`The page returned HTTP ${response.status()}.`);
+    const status = response.status();
+    if (status === 404) throw pageError('The page was not found (HTTP 404).');
+    if (status >= 500) throw pageError(`The website had a server error (HTTP ${status}).`);
+    throw pageError(`The page returned HTTP ${status}.`);
   }
   // Some sites never finish loading, so these two waits are allowed to time out
   await page.waitForLoadState('load', { timeout: LOAD_WAIT_MS }).catch(() => {});
@@ -155,7 +175,7 @@ export async function captureBaseline(testId, startUrl, onProgress = () => {}) {
           siteOrigin = new URL(finalUrl).origin; // e.g. example.com may redirect to www.example.com
           seen.add(finalUrl);
         } else if (new URL(finalUrl).origin !== siteOrigin) {
-          throw new Error('The page redirected to another website.');
+          throw pageError('The page redirected to another website.');
         } else if (finalUrl !== url) {
           if (seen.has(finalUrl)) {
             console.log(`[Capture] Skipped ${url}: it redirects to ${finalUrl}, which is already known`);
@@ -206,10 +226,10 @@ function checkNoRedirect(requestedUrl, landedUrl, expectedPath) {
   const requested = new URL(requestedUrl);
   const landed = new URL(landedUrl);
   if (landed.origin !== requested.origin) {
-    throw new Error(`The page redirected to another website (${landed.origin}).`);
+    throw pageError(`The page redirected to another website (${landed.origin}).`);
   }
   if (normalizeUrl(landed.href) !== normalizeUrl(requested.href)) {
-    throw new Error(`Expected ${expectedPath} but the page redirected to ${pathOf(landed.href)}.`);
+    throw pageError(`Expected ${expectedPath} but the page redirected to ${pathOf(landed.href)}.`);
   }
 }
 

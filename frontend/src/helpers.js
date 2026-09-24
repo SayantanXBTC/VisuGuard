@@ -16,6 +16,9 @@ export const statusTone = (status) => statusInfo[status]?.tone || 'neutral';
 export const formatDate = (isoText) =>
   new Date(isoText).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
+// A capture or analysis is running: the test cannot be deleted right now
+export const isRunning = (status) => ['capturing_baseline', 'capturing_current', 'analyzing'].includes(status);
+
 export const shortId = (id) => id.slice(0, 8);
 
 // Pages from baseline_pages / current_pages that have a screenshot, and pages that failed

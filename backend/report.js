@@ -140,7 +140,7 @@ function writeReport(doc, { testId, baselineUrl, currentUrl, results, generatedA
 }
 
 // Returns the finished PDF as a Buffer.
-export function buildReportPdf(report) {
+function buildReportPdf(report) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: MARGIN, info: { Title: 'VisuGuard Visual Regression Report' } });
     const chunks = [];
@@ -157,8 +157,15 @@ export function buildReportPdf(report) {
   });
 }
 
-// Sends a PDF as a download
-export function sendPdf(res, pdf, fileName) {
+// Builds the PDF and sends it as a download. A failure is logged and answered with a short message.
+export async function sendReportPdf(res, report, fileName) {
+  let pdf;
+  try {
+    pdf = await buildReportPdf(report);
+  } catch (error) {
+    console.error('[PDF] Could not build the report:', error);
+    return res.status(500).json({ error: 'The PDF could not be created. Please try again.' });
+  }
   res.set({
     'Content-Type': 'application/pdf',
     'Content-Disposition': `attachment; filename="${fileName}"`,

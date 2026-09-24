@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getTest, captureBaseline, captureCurrent, analyzeTest, listComparisons, getComparison } from '../api.js';
-import { capturedPages, formatDate, statusLabel, statusTone } from '../helpers.js';
+import { capturedPages, formatDate, isRunning, statusLabel, statusTone } from '../helpers.js';
 import BaselineCapture from '../components/BaselineCapture.jsx';
 import CurrentCapture from '../components/CurrentCapture.jsx';
 import AnalysisPanel from '../components/AnalysisPanel.jsx';
@@ -17,6 +17,7 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState('');
+  const [connectionLost, setConnectionLost] = useState(false); // polling keeps failing
 
   // Compare Another URL
   const [anotherMode, setAnotherMode] = useState(false); // showing the form for another deployment
@@ -61,17 +62,30 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
 
   // While a capture or the analysis is running, ask the server for news every 1.5 seconds
   useEffect(() => {
-    if (!['capturing_baseline', 'capturing_current', 'analyzing'].includes(test?.status)) return;
+    if (!isRunning(test?.status)) return;
 
     let ignore = false;
+    let failures = 0;
     const timer = setInterval(() => {
       getTest(testId)
         .then((data) => {
           if (ignore) return;
+          failures = 0;
+          setConnectionLost(false);
           setTest(data.test);
           setProgress(data.progress);
         })
-        .catch((err) => console.error(err)); // try again on the next tick
+        .catch((err) => {
+          console.error(err); // try again on the next tick
+          if (ignore) return;
+          if (err.message === 'Test not found.') {
+            // deleted elsewhere (another tab): nothing left to poll
+            setError('This test no longer exists.');
+            setTest(null);
+          } else if (++failures >= 3) {
+            setConnectionLost(true); // the job may still be running on the server
+          }
+        });
     }, POLL_INTERVAL_MS);
 
     return () => {
@@ -176,8 +190,21 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
               <h1 className="test-url">{test.baseline_url}</h1>
               <span className={`badge badge-${statusTone(test.status)}`}>{statusLabel(test.status)}</span>
             </div>
-            <button className="btn btn-outline" onClick={() => onDelete(test)}>Delete Test</button>
+            <button
+              className="btn btn-outline"
+              onClick={() => onDelete(test)}
+              disabled={isRunning(test.status)}
+              title={isRunning(test.status) ? 'Wait for the running job to finish' : undefined}
+            >
+              Delete Test
+            </button>
           </div>
+
+          {connectionLost && isRunning(test.status) && (
+            <p className="banner banner-warning" role="alert">
+              Lost contact with the server. The job may still be running. Trying again...
+            </p>
+          )}
 
           <dl className="detail-list panel">
             <dt>Test ID</dt>

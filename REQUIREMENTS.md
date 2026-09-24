@@ -1,6 +1,6 @@
 # VisuGuard: Requirements and Build Plan
 
-Status: Stage 7 done (PDF export and Compare Another URL). Written 2026-09-24.
+Status: Stage 8 done (error handling, demo sites, reliability). Written 2026-09-24.
 
 "VisuGuard" is a placeholder name. The UI reads it from one constant (`frontend/src/config.js`), so renaming is a one-line change.
 
@@ -124,6 +124,7 @@ Landing -> Auth -> Dashboard
 ```
 Meetmux/
 ├── REQUIREMENTS.md
+├── demo-sites/               two tiny local websites for the demo (see section 17): server.js, baseline/, changed/, README.md
 ├── backend/
 │   ├── package.json          "type": "module", canvas override, pdfkit
 │   ├── .env.example
@@ -197,7 +198,7 @@ Every API call sends `Authorization: Bearer <supabase access token>`.
 - Ignore `#hash`, `mailto:`, `tel:`, `javascript:`, and file links (.pdf .zip .png .jpg .jpeg .gif .svg .webp .mp4 .css .js .xml .ico).
 - De-duplicate by full URL: `#fragments` are dropped and a trailing slash is ignored. Query strings are kept (`?id=1` and `?id=2` can be different pages).
 - Stop at `MAX_PAGES` (default 10, set in `.env`). The first page counts as page 1, and failed pages count toward the limit.
-- If one page fails (timeout, HTTP 400 or more, redirect to another website), record it with its `error` and continue. The test still completes if at least one page was captured.
+- If one page fails (timeout, HTTP 400 or more, redirect to another website; the text shown is described in section 18), record it with its `error` and continue. The test still completes if at least one page was captured.
 - A page that redirects to an already known URL is skipped, not stored twice. If the first page redirects (for example to `www.`), the crawl continues on the address it landed on.
 
 **Each page.** `goto` (wait for `domcontentloaded`, 30 s timeout) -> best-effort wait for `load` and for network idle -> scroll down and back (loads lazy images) -> wait for fonts -> full-page screenshot with animations disabled. Save the page `<title>` (empty text if it cannot be read).
@@ -252,7 +253,7 @@ Express serves it at `/files/<testId>/...`. Each test has its own folder, so del
   "pages": [
     { "index": 1, "path": "/", "title": "Home", "baseline": "/files/<id>/baseline/page-001.png", "current": "/files/<id>/current/page-001.png", "diff": "/files/<id>/diff/page-001.png", "mismatchPercentage": 0, "sameSize": true, "status": "unchanged" },
     { "index": 2, "path": "/about", "title": "About", "baseline": "...", "current": "...", "diff": "...", "mismatchPercentage": 7.43, "sameSize": true, "status": "changed" },
-    { "index": 4, "path": "/contact", "title": "", "baseline": "/files/<id>/baseline/page-004.png", "current": null, "diff": null, "mismatchPercentage": null, "status": "missing_current", "error": "The page returned HTTP 404." }
+    { "index": 4, "path": "/contact", "title": "", "baseline": "/files/<id>/baseline/page-004.png", "current": null, "diff": null, "mismatchPercentage": null, "status": "missing_current", "error": "The page was not found (HTTP 404)." }
   ]
 }
 ```
@@ -336,7 +337,7 @@ All routes except `/api/health` need the bearer token (401 without it; a test or
 | Method and path | Body | What it does |
 |---|---|---|
 | GET `/api/health` | | Check the server is up |
-| GET `/api/tests` | | History: my tests, newest first (summary columns only) |
+| GET `/api/tests` | | History: my tests, newest first (summary columns only). A test left in a running status by a server restart is marked `failed` here (section 18) |
 | POST `/api/tests` | `{ baselineUrl }` | Create the test (status `created`), return `{ test }` |
 | POST `/api/tests/:id/capture-baseline` | | Start the baseline capture in the background, return `202 { testId, status }`. 409 if it is running or already captured. Allowed from `created` and `failed` |
 | GET `/api/tests/:id` | | Full row + `progress` (polling and report) |
@@ -401,10 +402,10 @@ Stage 1 installed only what it needs: `express` and `@supabase/supabase-js` (bac
 | 5 | Current capture: reuses the baseline paths, no crawling, `capture-current`, current screenshot grid | done |
 | 6 | Comparison + report: `comparer.js` (Resemble.js), `analyze` endpoint, diff images, `ComparisonReport` with lightbox | done |
 | 7 | PDF export (`report.js`, pdfkit) and Compare Another URL (`comparisons` table, `comparisons.js`, comparison history) | done |
-| 8 | Error handling, demo sites, polish | 1.5 h |
+| 8 | Error handling and messages, job-state safety, demo sites (`demo-sites/`), small UI reliability fixes | done |
 | - | Buffer | 2 h |
 
-**Demo plan (stage 8):** two tiny static demo sites (v1 and v2 with small visible changes such as a colour, a moved button and a removed page), served on two local ports by a small Express script, so the demo does not depend on a third-party site.
+**Demo plan (stage 8):** done, see section 17. A major visual redesign is not part of stage 8.
 
 ## 14. Known limits and later ideas
 
@@ -415,9 +416,9 @@ Limits of the MVP:
 - Screenshots live on local disk and are lost if the host resets. Fine for a local demo. Later: Supabase Storage.
 - Screenshot URLs (`/files/<uuid>/...`) are public but unguessable. Later: signed URLs.
 - The backend opens any http/https URL a signed-in user gives it, including localhost (needed to demo local sites). Before a public deploy, block private and internal addresses (SSRF).
-- Jobs run inside the Express process (no queue). If the server restarts during a capture, the row stays `capturing_baseline` until the next `GET /api/tests/:id`, which marks it `failed` ("interrupted") so the user can retry.
+- Jobs run inside the Express process (no queue). If the server restarts during a capture or analysis, the row keeps its running status until the next `GET /api/tests` or `GET /api/tests/:id`, which marks it `failed` ("interrupted") so the user can retry (section 18).
 - A capture saves its result with the signed-in user's token, so a capture running longer than the token lifetime (about 1 hour) could not save. Captures take seconds to minutes.
-- Deleting a test while its capture runs is refused (409).
+- Deleting a test while a capture or analysis runs is refused (409), and the Delete buttons are disabled in the UI while a job runs.
 - Baseline and current URLs should both point to the site root. Only the host of the current URL is used; its own path is ignored.
 - The report's small images show only the top of a tall page. The diff and the full screenshot are one click away in the lightbox.
 - A current capture that succeeded but was not analyzed yet cannot be replaced. Analyze it first, then use Compare Another URL. A failed current capture can be retried.
@@ -445,3 +446,80 @@ Later, if time permits: AI explanation of differences, CI/CD and GitHub integrat
 4. Resemble.js compares each baseline/current pair, calculates a mismatch % and draws a diff image.
 5. The results are saved in Supabase and shown as a report that can be exported to PDF.
 6. For the next deployment the user clicks Compare Another URL: the same baseline is compared with a new current URL, and every earlier report stays available in the history.
+
+## 17. Demo sites (stage 8)
+
+`demo-sites/` holds two tiny websites so the whole pipeline can be shown without any real site. Only Node's built-in modules are used (`http`, `fs`, `path`), no install step.
+
+```bash
+cd demo-sites
+node server.js              # both sites; `node server.js baseline` or `node server.js changed` starts one
+```
+
+| Site | URL | Folder | Use as |
+|---|---|---|---|
+| baseline | `http://localhost:4100` | `demo-sites/baseline/` | Baseline URL |
+| changed | `http://localhost:4101` | `demo-sites/changed/` | Current URL |
+
+Each folder is plain HTML and one `style.css`. The baseline has 6 pages (`/`, `/about`, `/services`, `/contact`, `/team`, `/careers`). The changed site has real HTML/CSS differences, so the diffs come from real Playwright screenshots and Resemble.js:
+
+| Page | Difference | Result (measured on the dev machine, will vary a little with fonts) |
+|---|---|---|
+| `/` | new heading, new text, taller hero, orange colours, bigger button | changed, 47.92% |
+| `/about` | one sentence is longer | changed, 2.15% |
+| `/services` | four orange cards in two columns instead of three in a row | changed, 20.4% |
+| `/contact` | bigger orange button | changed, 1.57% |
+| `/team` | identical | unchanged, 0% |
+| `/careers` | not served (404) | unavailable (missing page) |
+
+So the report reads: 5 compared, 4 changed, 1 unchanged, 1 unavailable. Comparing the baseline site with itself gives 6 compared and 0 changed (a quick way to show a second report in Compare Another URL). `demo-sites/README.md` has the click-by-click demo steps.
+
+## 18. Error handling and reliability (stage 8)
+
+**Messages.** Users see short plain sentences. Details (Playwright text, stack traces, database errors) go to the server log only. Anything unexpected in a route becomes `500 { "error": "Something went wrong. Please try again." }`.
+
+| Case | What the user sees |
+|---|---|
+| Empty URL, no `http(s)://`, `ftp:`, `javascript:`, `file:`, not a URL | `Enter a valid URL that starts with http:// or https://` (400, checked in the browser and again on the server) |
+| Broken JSON body | `Invalid request.` (400) |
+| No or invalid token | 401 `Please sign in.` / `Your session has expired. Please sign in again.` |
+| Test or comparison of someone else, or not existing | 404 `Test not found.` / `Comparison not found.` |
+| DNS failure | `Unable to reach this website. Check that the address is correct.` |
+| Connection refused | `The website refused the connection. Check that it is running.` |
+| Connection reset / closed | `The website closed the connection without answering.` |
+| Invalid certificate | `The website has an invalid security certificate.` |
+| Redirect loop | `The page keeps redirecting and never loads.` |
+| Timeout (30 s) | `The page took too long to load (over 30 seconds).` |
+| HTTP 404 / 5xx / other | `The page was not found (HTTP 404).` / `The website had a server error (HTTP 500).` / `The page returned HTTP 403.` |
+| Current capture redirects to another path / another site | `Expected /team but the page redirected to /about.` / `The page redirected to another website (<origin>).` |
+| Any other browser error | `The page could not be loaded.` |
+| Every baseline page fails | test `failed`: `No page could be captured from this website. <reason of the first page>` |
+| Every current page fails | test `failed`: `None of the N baseline pages could be captured from this URL. <reason>` |
+| Nothing could be compared | test `failed`: `None of the N pages could be compared.` |
+| PDF cannot be built | 500 `The PDF could not be created. Please try again.` |
+| Report without pages | 409 `This report has no pages to export.` |
+
+The browser errors are turned into text by `describeError` in `screenshotter.js`. Errors that the code throws itself (HTTP status, redirects) are marked as already written for the user; every other error is mapped from a table of Chromium error codes, or becomes the generic sentence above.
+
+**Partly broken sites.** A page that fails is kept in `baseline_pages` / `current_pages` with its `error`. The test only fails when not one page worked. In the report such pages are "Unavailable" with the reason.
+
+**Status lifecycle.** `created` -> `capturing_baseline` -> `baseline_captured` -> `capturing_current` -> `current_captured` -> `analyzing` -> `completed`. `failed` can follow any running status; `error_message` says why. Compare Another URL goes `completed` -> `capturing_current` (the finished report is saved to history first).
+
+**Retry rules.**
+| Situation (status) | What the user can do |
+|---|---|
+| `failed`, no baseline | Capture Baseline again |
+| `failed`, baseline but no current pages | enter a current URL again |
+| `failed`, both captures exist (analysis failed) | Analyze again (nothing is recaptured) |
+| `completed` | Compare Another URL |
+| `capturing_*`, `analyzing` | wait; every start action and Delete answer 409 |
+| a baseline exists | it can never be captured again, in any status |
+
+**Duplicate actions.** Three layers: the buttons are disabled while a request is sent; the server checks an in-memory job list (`runningJobs`) and answers 409; and the database status change is an atomic update (`where status = <the status that was read>`), so two simultaneous requests cannot both win. The job is registered in memory before that update, so a poll that already sees the new status never mistakes a starting job for a dead one.
+
+**Interrupted jobs.** A job only lives in the server's memory. If the server restarts, the test keeps its running status in the database. `healInterruptedTest` (`routes/tests.js`) runs on `GET /api/tests` (list) and `GET /api/tests/:id`: a test with a running status and no job in memory becomes `failed` with `The capture was interrupted (the server restarted). Please try again.` (or "analysis"). No test can stay locked. A restart while a Compare Another URL capture runs leaves the previous report in the history.
+
+**Frontend.** While a job runs, Delete is disabled (list and detail). If polling fails 3 times in a row a warning says the contact with the server was lost, and it clears by itself when the server answers. A test deleted in another tab shows "This test no longer exists." Export PDF is disabled while the PDF is built and shows any error.
+
+**Verified in stage 8** (real backend, demo sites, throw-away accounts; no test data left): input validation (7 bad URLs), auth 401 and 404s, DNS failure, refused connection, 404 and 500 start pages, timeout, partly failing current site (500, 404, redirect to another path, redirect to another origin), all pages failing then retry, double clicks (baseline, current), delete while running (409), broken image -> PDF 500 message, stale status healing for all three running statuses on list and detail, a real server restart during a capture followed by a retry, the full 21-step UI demo flow, a mid-capture server stop in the UI (banner, recovery, retry), no console errors and no horizontal overflow at 390 px, and no Chromium process left.
+

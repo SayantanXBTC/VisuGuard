@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { captureBaseline, captureCurrent, STORAGE_DIR } from '../screenshotter.js';
 import { compareScreenshots } from '../comparer.js';
 import { archiveComparison, undoArchive } from '../comparisons.js';
-import { buildReportPdf, sendPdf } from '../report.js';
+import { sendReportPdf } from '../report.js';
 
 // All routes here run after requireUser, so req.user and req.db are set.
 // req.db acts as the signed-in user: Row Level Security only lets it see their own rows.
@@ -37,6 +37,26 @@ const hasBaseline = (test) => Array.isArray(test.baseline_pages) && test.baselin
 // True once the current capture produced at least one screenshot
 const hasCurrent = (test) => Array.isArray(test.current_pages) && test.current_pages.some((page) => page.screenshot);
 
+const RUNNING_STATUSES = ['capturing_baseline', 'capturing_current', 'analyzing'];
+
+// A job that was running when the server restarted is gone, but its test still says "running".
+// This marks such a test as failed, so the user can retry instead of waiting forever.
+// A job that really runs is in runningJobs, so it is left alone.
+async function healInterruptedTest(db, test) {
+  if (!RUNNING_STATUSES.includes(test.status) || runningJobs.has(test.id)) return test;
+
+  const job = test.status === 'analyzing' ? 'analysis' : 'capture';
+  const { data, error } = await db
+    .from('tests')
+    .update({ status: 'failed', error_message: `The ${job} was interrupted (the server restarted). Please try again.` })
+    .eq('id', test.id)
+    .eq('status', test.status) // only if nothing changed in the meantime
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { ...test, ...data } : test;
+}
+
 async function updateTest(db, id, fields) {
   const { error } = await db.from('tests').update(fields).eq('id', id);
   if (error) throw error;
@@ -63,7 +83,7 @@ async function runBaselineCapture(db, test) {
     const capturedCount = pages.filter((page) => page.screenshot).length;
 
     if (capturedCount === 0) {
-      failure = pages[0]?.error || 'No pages could be captured.';
+      failure = `No page could be captured from this website. ${pages[0]?.error || ''}`.trim();
     } else {
       // Partly failed crawls are kept: failed pages stay in the list with their error
       await updateTest(db, test.id, { status: 'baseline_captured', baseline_pages: pages, error_message: null });
@@ -90,7 +110,7 @@ async function runCurrentCapture(db, test, currentUrl) {
     const capturedCount = pages.filter((page) => page.screenshot).length;
 
     if (capturedCount === 0) {
-      failure = `None of the ${pages.length} pages could be captured. ${pages[0]?.error || ''}`.trim();
+      failure = `None of the ${pages.length} baseline pages could be captured from this URL. ${pages[0]?.error || ''}`.trim();
     } else {
       // Pages that failed stay in the list with their error, so the user can see what is missing
       await updateTest(db, test.id, { status: 'current_captured', current_pages: pages, error_message: null });
@@ -141,7 +161,7 @@ router.get('/', async (req, res) => {
     .select('id, baseline_url, current_url, status, error_message, pages_tested, pages_changed, created_at')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  res.json({ tests: data });
+  res.json({ tests: await Promise.all(data.map((test) => healInterruptedTest(req.db, test))) });
 });
 
 // POST /api/tests { baselineUrl }: create a test. Capturing is a separate step.
@@ -169,23 +189,8 @@ router.get('/:id', async (req, res) => {
   const { data, error } = await req.db.from('tests').select('*').eq('id', req.params.id).maybeSingle();
   if (error) throw error;
   if (!data) return notFound(res);
-  let test = data;
 
-  // A capture or analysis that was running when the server restarted is gone. Mark it failed so the user can retry.
-  const looksRunning = ['capturing_baseline', 'capturing_current', 'analyzing'].includes(test.status);
-  if (looksRunning && !runningJobs.has(test.id)) {
-    const job = test.status === 'analyzing' ? 'analysis' : 'capture';
-    const { data: healed, error: healError } = await req.db
-      .from('tests')
-      .update({ status: 'failed', error_message: `The ${job} was interrupted (the server restarted). Please try again.` })
-      .eq('id', test.id)
-      .eq('status', test.status)
-      .select()
-      .maybeSingle();
-    if (healError) throw healError;
-    if (healed) test = healed;
-  }
-
+  const test = await healInterruptedTest(req.db, data);
   res.json({ test, progress: runningJobs.get(test.id) ?? null });
 });
 
@@ -205,11 +210,11 @@ router.post('/:id/capture-baseline', async (req, res) => {
 
   // 2. Check that a capture makes sense right now
   if (!test.baseline_url) return res.status(400).json({ error: 'This test has no baseline URL.' });
-  if (test.status === 'capturing_baseline') {
+  if (test.status === 'capturing_baseline' || runningJobs.has(id)) {
     return res.status(409).json({ error: 'Baseline capture is already running.' });
   }
-  if (test.status === 'capturing_current') {
-    return res.status(409).json({ error: 'A current-version capture is running. Wait for it to finish.' });
+  if (test.status === 'capturing_current' || test.status === 'analyzing') {
+    return res.status(409).json({ error: 'Another job is running for this test. Wait for it to finish.' });
   }
   // A test that failed AFTER its baseline was captured (a failed current capture) keeps its baseline.
   // Only a test that has no baseline yet may capture one.
@@ -219,15 +224,18 @@ router.post('/:id/capture-baseline', async (req, res) => {
   }
 
   // 3. Claim the test. The update only works if the status is still what we just read,
-  //    so two quick clicks cannot start two captures.
+  //    so two quick clicks cannot start two captures. The job is registered in memory first, so a poll
+  //    that already sees the new status does not mistake it for an interrupted job (see healInterruptedTest).
+  runningJobs.set(id, 'Starting browser...');
   const { data: claimed, error: claimError } = await req.db
     .from('tests')
     .update({ status: 'capturing_baseline', error_message: null })
     .eq('id', id)
     .eq('status', test.status)
     .select('id');
-  if (claimError) throw claimError;
-  if (claimed.length === 0) {
+  if (claimError || claimed.length === 0) {
+    runningJobs.delete(id);
+    if (claimError) throw claimError;
     return res.status(409).json({ error: 'Baseline capture is already running.' });
   }
 
@@ -279,10 +287,11 @@ router.post('/:id/capture-current', async (req, res) => {
     return res.status(409).json({ error: 'The current version was already captured for this test.' });
   }
 
-  // 4. Compare Another URL: save the finished report before its folders are reused
+  // 4. Register the job in memory first (a second click gets a 409, and a poll does not mistake it for an
+  //    interrupted job). Compare Another URL: then save the finished report before its folders are reused.
+  runningJobs.set(id, isAnotherComparison ? 'Saving the finished report...' : 'Starting browser...');
   let archivedId = null;
   if (isAnotherComparison) {
-    runningJobs.set(id, 'Saving the finished report...'); // a second click gets a 409 while this runs
     try {
       archivedId = await archiveComparison(req.db, req.user.id, test);
     } catch (archiveError) {
@@ -300,10 +309,8 @@ router.post('/:id/capture-current', async (req, res) => {
     .eq('status', test.status)
     .select('id');
   if (claimError || claimed.length === 0) {
-    if (archivedId) {
-      runningJobs.delete(id);
-      await undoArchive(req.db, id, archivedId); // the test did not change, so the history entry must not stay
-    }
+    runningJobs.delete(id);
+    if (archivedId) await undoArchive(req.db, id, archivedId); // the test did not change, so the history entry must not stay
     if (claimError) throw claimError;
     return res.status(409).json({ error: 'Current capture is already running.' });
   }
@@ -355,14 +362,15 @@ router.get('/:id/report.pdf', async (req, res) => {
   if (test.status !== 'completed' || !test.results) {
     return res.status(409).json({ error: 'The analysis is not finished yet, so there is no report to export.' });
   }
+  if (!test.results.pages?.length) {
+    return res.status(409).json({ error: 'This report has no pages to export.' });
+  }
 
-  const pdf = await buildReportPdf({
-    testId: test.id,
-    baselineUrl: test.baseline_url,
-    currentUrl: test.current_url,
-    results: test.results,
-  });
-  sendPdf(res, pdf, `visuguard-report-${test.id.slice(0, 8)}.pdf`);
+  await sendReportPdf(
+    res,
+    { testId: test.id, baselineUrl: test.baseline_url, currentUrl: test.current_url, results: test.results },
+    `visuguard-report-${test.id.slice(0, 8)}.pdf`,
+  );
 });
 
 // POST /api/tests/:id/analyze: compare the saved screenshots in the background.
@@ -393,14 +401,16 @@ router.post('/:id/analyze', async (req, res) => {
 
   // 3. Claim the test and clear old results (needed for a retry). The update only works if the status
   //    is still what we just read, so two quick clicks cannot start two analyses.
+  runningJobs.set(id, 'Starting comparison...'); // registered first, see healInterruptedTest
   const { data: claimed, error: claimError } = await req.db
     .from('tests')
     .update({ status: 'analyzing', results: null, pages_tested: null, pages_changed: null, avg_mismatch: null, error_message: null })
     .eq('id', id)
     .eq('status', test.status)
     .select('id');
-  if (claimError) throw claimError;
-  if (claimed.length === 0) {
+  if (claimError || claimed.length === 0) {
+    runningJobs.delete(id);
+    if (claimError) throw claimError;
     return res.status(409).json({ error: 'Analysis is already running.' });
   }
 

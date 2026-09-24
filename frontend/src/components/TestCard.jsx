@@ -1,4 +1,4 @@
-import { formatDate, shortId, statusLabel, statusTone } from '../helpers.js';
+import { formatDate, isRunning, shortId, statusLabel, statusTone } from '../helpers.js';
 
 // One row in the test list. Click the row to open the test.
 function TestCard({ test, onOpen, onDelete }) {
@@ -14,7 +14,14 @@ function TestCard({ test, onOpen, onDelete }) {
         </span>
         {test.current_url && <span className="test-meta">Current: {test.current_url}</span>}
       </button>
-      <button className="btn btn-outline btn-small" onClick={() => onDelete(test)}>Delete</button>
+      <button
+        className="btn btn-outline btn-small"
+        onClick={() => onDelete(test)}
+        disabled={isRunning(test.status)}
+        title={isRunning(test.status) ? 'Wait for the running job to finish' : undefined}
+      >
+        Delete
+      </button>
     </li>
   );
 }

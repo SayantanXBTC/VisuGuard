@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { buildReportPdf, sendPdf } from '../report.js';
+import { sendReportPdf } from '../report.js';
 
 // Old, finished comparisons (history). All routes run after requireUser.
 // req.db acts as the signed-in user, so Row Level Security only shows their own comparisons.
@@ -31,13 +31,20 @@ router.get('/:id/report.pdf', async (req, res) => {
   const comparison = await findComparison(req.db, req.params.id);
   if (!comparison) return notFound(res);
 
-  const pdf = await buildReportPdf({
-    testId: comparison.test_id,
-    baselineUrl: comparison.baseline_url,
-    currentUrl: comparison.current_url,
-    results: comparison.results,
-  });
-  sendPdf(res, pdf, `visuguard-report-${comparison.test_id.slice(0, 8)}-${comparison.id.slice(0, 8)}.pdf`);
+  if (!comparison.results?.pages?.length) {
+    return res.status(409).json({ error: 'This report has no pages to export.' });
+  }
+
+  await sendReportPdf(
+    res,
+    {
+      testId: comparison.test_id,
+      baselineUrl: comparison.baseline_url,
+      currentUrl: comparison.current_url,
+      results: comparison.results,
+    },
+    `visuguard-report-${comparison.test_id.slice(0, 8)}-${comparison.id.slice(0, 8)}.pdf`,
+  );
 });
 
 export default router;
