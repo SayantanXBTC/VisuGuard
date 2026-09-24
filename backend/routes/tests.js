@@ -6,10 +6,24 @@ import { compareScreenshots } from '../comparer.js';
 import { addAiAnalysis, aiConfigured } from '../aiAnalyzer.js';
 import { archiveComparison, undoArchive } from '../comparisons.js';
 import { sendReportPdf } from '../report.js';
+import { rateLimit, byUser } from '../rateLimit.js';
 
 // All routes here run after requireUser, so req.user and req.db are set.
 // req.db acts as the signed-in user: Row Level Security only lets it see their own rows.
 const router = Router();
+
+// Generous limit covering normal use (the UI polls GET /:id every 1.5s while a job runs).
+router.use(rateLimit({ limit: 180, windowMs: 60_000, keyFn: byUser }));
+
+// Stricter limit for the routes that launch a Playwright crawl/capture or an AI call: each one is
+// genuinely expensive (a real browser, real network requests to the target site, real AI tokens),
+// unlike the plain reads above.
+const jobLimit = rateLimit({
+  limit: 10,
+  windowMs: 5 * 60_000,
+  keyFn: byUser,
+  message: 'Too many capture/analysis requests. Please wait a few minutes before starting another.',
+});
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -214,7 +228,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/tests/:id/capture-baseline: start the Playwright capture in the background.
-router.post('/:id/capture-baseline', async (req, res) => {
+router.post('/:id/capture-baseline', jobLimit, async (req, res) => {
   const id = req.params.id;
   if (!UUID.test(id)) return notFound(res);
 
@@ -266,7 +280,7 @@ router.post('/:id/capture-baseline', async (req, res) => {
 // POST /api/tests/:id/capture-current { currentUrl }: screenshot the baseline's pages on the current site.
 // This is also "Compare Another URL": if the test already has a finished report, that report is saved
 // to history first (see comparisons.js). The baseline is reused and never changes.
-router.post('/:id/capture-current', async (req, res) => {
+router.post('/:id/capture-current', jobLimit, async (req, res) => {
   const id = req.params.id;
   if (!UUID.test(id)) return notFound(res);
 
@@ -393,7 +407,7 @@ router.get('/:id/report.pdf', async (req, res) => {
 });
 
 // POST /api/tests/:id/analyze: compare the saved screenshots in the background.
-router.post('/:id/analyze', async (req, res) => {
+router.post('/:id/analyze', jobLimit, async (req, res) => {
   const id = req.params.id;
   if (!UUID.test(id)) return notFound(res);
 
@@ -440,7 +454,7 @@ router.post('/:id/analyze', async (req, res) => {
 
 // POST /api/tests/:id/retry-ai: ask the AI again for the changed pages of the finished report that have no AI
 // analysis yet. Nothing is captured or compared again: screenshots and Resemble.js results stay as they are.
-router.post('/:id/retry-ai', async (req, res) => {
+router.post('/:id/retry-ai', jobLimit, async (req, res) => {
   const id = req.params.id;
   if (!UUID.test(id)) return notFound(res);
 

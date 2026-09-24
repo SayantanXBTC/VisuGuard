@@ -80,13 +80,30 @@ function Findings({ page }) {
 }
 
 // One screenshot in a dark frame. Tall pages scroll inside the frame. Click (or the button) to see it full screen.
+// A shimmering skeleton fills the frame until the image has actually loaded, so switching between
+// Baseline / Current / Diff never shows a blank or half-drawn frame.
 function Frame({ label, src, onOpen }) {
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => setLoaded(false), [src]); // reset when the tab (baseline/current/diff) changes
+
   if (!src) return <div className="frame-empty">No {label.toLowerCase()} image</div>;
   return (
     <div className="frame-wrap">
       <span className="frame-label">{label}</span>
-      <div className="frame">
-        <img src={src} alt={label} loading="lazy" onClick={() => onOpen(src, label)} />
+      <div className="frame" style={loaded ? undefined : { minHeight: 320, position: 'relative' }}>
+        {!loaded && (
+          <div className="screenshot-skeleton">
+            <span className="skeleton-shimmer" aria-hidden="true" />
+          </div>
+        )}
+        <img
+          src={src}
+          alt={label}
+          loading="lazy"
+          onClick={() => onOpen(src, label)}
+          style={{ opacity: loaded ? 1 : 0 }}
+          onLoad={() => setLoaded(true)}
+        />
       </div>
       <button className="frame-open" onClick={() => onOpen(src, label)} aria-label={`Enlarge ${label}`} title="Enlarge">
         <Maximize2 size={14} aria-hidden="true" />

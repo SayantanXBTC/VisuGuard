@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { sendReportPdf } from '../report.js';
+import { rateLimit, byUser } from '../rateLimit.js';
 
 // Old, finished comparisons (history). All routes run after requireUser.
 // req.db acts as the signed-in user, so Row Level Security only shows their own comparisons.
 const router = Router();
+router.use(rateLimit({ limit: 120, windowMs: 60_000, keyFn: byUser }));
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const notFound = (res) => res.status(404).json({ error: 'Comparison not found.' });

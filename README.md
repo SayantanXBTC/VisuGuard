@@ -1,5 +1,7 @@
 # VisuGuard
 
+**Live: [https://visu-guard.vercel.app/](https://visu-guard.vercel.app/)**
+
 **Visual regression testing for websites.** Save one approved version of your site (the *baseline*), then compare any new deployment against it, page by page. VisuGuard shows exactly what changed, how much, and (optionally) describes the change in plain words with AI.
 
 - Full-page screenshots of every page, captured with Playwright
@@ -8,7 +10,8 @@
 - Optional AI findings per changed page: summary, severity, categories, observations
 - Interactive report with a before/after slider, comparison history and PDF export
 - **Edith**, a built-in chat assistant (Anthropic Claude) that answers questions about the app
-- Accounts with email/password or Google sign-in. Each user only sees their own tests.
+- Accounts with email/password or Google sign-in. Each user only sees their own tests (Supabase Row Level Security).
+- Rate-limited API: a generous per-IP limit on every request, a stricter per-user limit on Playwright/AI jobs.
 
 ---
 
@@ -302,27 +305,17 @@ Test statuses: `created`, `capturing_baseline`, `baseline_captured`, `capturing_
 
 ## Deployment
 
-**Backend (Render, Docker).** Use a Docker service with a Playwright base image, because Chromium and `canvas` need system libraries. Mount a persistent disk at `<backend>/storage`, or screenshots are lost on restart. Set the backend environment variables above, and start with `node server.js`. Use at least a 512 MB instance: Chromium can run out of memory on smaller ones.
+**Backend (Railway, Docker).** Deployed from `backend/Dockerfile` (Node 22, Chromium + canvas system libraries installed at build time). Root directory `backend`, a persistent volume mounted at `/app/storage` (screenshots are lost on restart otherwise), and the backend environment variables above set in the service's Variables tab. `backend/railway.json` pins the build path and the `/api/health` health check. A `render.yaml` is also kept in the repo root as an alternative if deploying to Render instead.
 
-**Frontend (Vercel).** Set the project root to `frontend`, add the two `VITE_*` variables, and add rewrites in `frontend/vercel.json` that forward `/api/*` and `/files/*` to the backend URL:
+**Frontend (Vercel).** Project root `frontend`, the two `VITE_*` variables set, and `frontend/vercel.json` forwards `/api/*` and `/files/*` to the backend:
 
 ```json
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://<your-backend>.onrender.com/api/:path*" },
-    { "source": "/files/:path*", "destination": "https://<your-backend>.onrender.com/files/:path*" }
+    { "source": "/api/:path*", "destination": "https://<your-backend>.up.railway.app/api/:path*" },
+    { "source": "/files/:path*", "destination": "https://<your-backend>.up.railway.app/files/:path*" }
   ]
 }
 ```
 
 Then add the Vercel domain to Supabase under **Authentication → URL Configuration** (Site URL and redirect URLs).
-
----
-
-## Limitations
-
-- Screenshots are stored on local disk, not in object storage.
-- Job progress is kept in memory, so it resets when the server restarts.
-- The crawl is capped at `MAX_PAGES` pages and follows only same-site links.
-- Dynamic content (ads, timestamps, carousels) can cause false differences.
-- Fonts and rendering differ slightly between machines, so mismatch percentages can vary a little.

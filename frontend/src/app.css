@@ -1694,7 +1694,7 @@
   height: auto;
   cursor: zoom-in;
   transform-origin: top center;
-  transition: transform 0.4s var(--ease);
+  transition: transform 0.4s var(--ease), opacity 0.3s ease;
 }
 
 .frame:hover img {
@@ -2668,6 +2668,7 @@
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.18);
 }
 
 .skeleton-shimmer {
@@ -2688,6 +2689,7 @@
   object-fit: cover;
   object-position: top;
   display: block;
+  transition: opacity 0.3s ease;
 }
 
 .screenshot-hover-overlay {

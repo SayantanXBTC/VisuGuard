@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { supabaseConfigured } from './supabase.js';
 import { requireUser } from './auth.js';
 import { STORAGE_DIR } from './screenshotter.js';
+import { rateLimit, byIp } from './rateLimit.js';
 import testsRouter from './routes/tests.js';
 import comparisonsRouter from './routes/comparisons.js';
 import chatRouter from './routes/chat.js';
@@ -13,7 +14,20 @@ const PORT = process.env.PORT || 3001;
 fs.mkdirSync(STORAGE_DIR, { recursive: true });
 
 const app = express();
+app.set('trust proxy', 1); // Railway/Render sit behind a proxy: req.ip must read the real client IP
 app.use(express.json());
+
+// Basic hardening headers. No templated HTML is ever served here (the frontend is a separate app),
+// so this is mostly about not letting the API responses be framed, sniffed or leaked cross-origin.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// A generous, first line of defense against scripted abuse, ahead of auth and the per-route limits below.
+app.use('/api', rateLimit({ limit: 300, windowMs: 5 * 60_000, keyFn: byIp, message: 'Too many requests from this address. Please slow down.' }));
 
 // Serve screenshot PNGs, for example /files/<testId>/baseline/home.png
 app.use('/files', express.static(STORAGE_DIR));

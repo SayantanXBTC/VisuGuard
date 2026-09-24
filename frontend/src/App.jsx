@@ -89,7 +89,14 @@ function App() {
     );
   }
 
-  if (checking) return <main className="center-message">Loading...</main>;
+  if (checking) {
+    return (
+      <main className="center-message">
+        <span className="spinner" aria-hidden="true" />
+        <span>Loading...</span>
+      </main>
+    );
+  }
 
   if (view === 'reset') {
     return <ResetPassword session={session} onDone={() => setView('dashboard')} onBack={() => setView('landing')} />;
