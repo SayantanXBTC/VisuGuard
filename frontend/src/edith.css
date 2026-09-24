@@ -14,15 +14,18 @@
 }
 
 .edith-launcher {
+  position: relative;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   height: 46px;
   padding: 0 18px 0 8px;
   border-radius: 999px;
-  background: rgba(10, 10, 14, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(8, 7, 6, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   color: #fff;
   font: inherit;
   font-size: 0.88rem;
@@ -33,7 +36,7 @@
 
 .edith-launcher:hover {
   transform: translateY(-2px);
-  background: rgba(24, 24, 32, 0.6);
+  background: rgba(20, 17, 14, 0.9);
 }
 
 .edith-launcher:active {
@@ -50,15 +53,82 @@
 
 .edith-avatar {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+  object-fit: cover;
+  object-position: center 30%;
+  background: radial-gradient(circle at 50% 35%, #3a2a22 0%, #17110d 75%);
+  border: 1px solid rgba(255, 196, 173, 0.35);
   box-shadow: 0 4px 14px -4px rgba(255, 140, 110, 0.6);
 }
 
 .edith-avatar-launcher {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
+}
+
+/* ---------- The hello: Edith hops out of her button, says hi, hops back ---------- */
+
+.edith-greet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-bottom: -14px; /* her feet tuck behind the launcher, so she looks like she came out of it */
+  pointer-events: none;
+}
+
+.edith-hop {
+  width: auto;
+  height: 150px;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 22px rgba(255, 150, 110, 0.18));
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.edith-bubble {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 210px;
+  margin-bottom: 70px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255, 196, 173, 0.28);
+  border-radius: 16px 16px 4px 16px;
+  background: rgba(14, 11, 9, 0.94);
+  box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  transform-origin: bottom right;
+}
+
+.edith-bubble strong {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.edith-bubble span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.edith-bubble:hover {
+  border-color: rgba(255, 196, 173, 0.5);
+}
+
+.edith-bubble:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 .edith-panel {
@@ -67,10 +137,11 @@
   width: min(380px, calc(100vw - 32px));
   height: min(540px, calc(100dvh - 120px));
   border-radius: 22px;
-  background: rgba(8, 8, 12, 0.62);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 7, 6, 0.9);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.85), inset 0 1px 1px rgba(255, 255, 255, 0.1);
   transform-origin: bottom right;
 }
 
@@ -300,6 +371,15 @@
 
   .edith-panel {
     height: min(520px, calc(100dvh - 96px));
+  }
+
+  .edith-hop {
+    height: 112px;
+  }
+
+  .edith-bubble {
+    max-width: 170px;
+    margin-bottom: 52px;
   }
 }
 

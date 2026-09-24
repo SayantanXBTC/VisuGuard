@@ -2,8 +2,8 @@
 // (baseline site on port 4100, changed site on port 4101). The images in /public/landing are the real
 // baseline, current and diff screenshots of that run's Home page.
 export const EXAMPLE = {
-  baseline: 'localhost:4100',
-  current: 'localhost:4101',
+  baseline: 'demobaseline.vercel.app',
+  current: 'demochanged.vercel.app',
   summary: { compared: 5, changed: 4, unchanged: 1, unavailable: 1 },
   pages: [
     { path: '/', status: 'changed', mismatch: 61.8 },

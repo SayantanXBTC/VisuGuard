@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Camera, ScanSearch, FileText, ShieldCheck, Check, Minus } from 'lucide-react';
 import { EXAMPLE, formatPercent } from './example.js';
 
@@ -58,7 +59,10 @@ const REPORT_PAGES = [
   { file: 'home', path: '/', mismatch: 61.8 },
   { file: 'services', path: '/services', mismatch: 17.38 },
 ];
-const VIEWS = ['diff', 'baseline', 'current', 'split'];
+// The card cycles through these automatically, crossfading from one to the next, forever -
+// showing the baseline, the new version, then the diff that highlights what changed between them.
+const AUTO_VIEWS = ['baseline', 'current', 'diff'];
+const HOLD_MS = 2200;
 
 // Fades a block in; `order` staggers the blocks one after another
 function Step({ order, className = '', children }) {
@@ -71,26 +75,44 @@ function Step({ order, className = '', children }) {
 
 function ReportCard() {
   const [page, setPage] = useState(REPORT_PAGES[0]);
-  const [view, setView] = useState('diff');
-  const [split, setSplit] = useState(50);
+  const [viewIndex, setViewIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const view = AUTO_VIEWS[viewIndex];
   const src = (kind) => `/landing/${kind}-${page.file}.jpg`;
 
+  // Auto-cycles baseline -> current -> diff -> repeat, forever, crossfading between each.
+  // Pauses on hover/focus so a curious visitor can hold a frame, and never runs with reduced motion.
+  useEffect(() => {
+    if (paused) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = setInterval(() => setViewIndex((index) => (index + 1) % AUTO_VIEWS.length), HOLD_MS);
+    return () => clearInterval(timer);
+  }, [paused, page]);
+
   return (
-    <div className="liquid-glass rounded-2xl p-3 sm:p-4 grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-center max-w-3xl">
+    <div
+      className="liquid-glass rounded-2xl p-3 sm:p-4 grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-center max-w-3xl"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
       <div className="relative aspect-video rounded-xl overflow-hidden bg-black/50">
-        {view !== 'split' && <img src={src(view)} alt={`${view} of ${page.path}`} className="absolute inset-0 w-full h-full object-contain" />}
-        {view === 'split' && (
-          <>
-            <img src={src('baseline')} alt="Baseline" className="absolute inset-0 w-full h-full object-contain" />
-            <img
-              src={src('current')}
-              alt="Current"
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{ clipPath: `inset(0 0 0 ${split}%)` }}
-            />
-            <div className="absolute top-0 bottom-0 w-0.5 bg-white pointer-events-none" style={{ left: `${split}%` }} />
-          </>
-        )}
+        <AnimatePresence mode="sync">
+          <motion.img
+            key={`${page.file}-${view}`}
+            src={src(view)}
+            alt={`${view} of ${page.path}`}
+            className="absolute inset-0 w-full h-full object-contain"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+          />
+        </AnimatePresence>
+        <span className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-full liquid-glass text-[11px] font-medium capitalize text-white">
+          {view}
+        </span>
       </div>
 
       <div className="space-y-3 text-sm">
@@ -111,31 +133,17 @@ function ReportCard() {
         <p className="text-gray-200">
           <span className="text-2xl font-medium text-white">{formatPercent(page.mismatch)}</span> mismatch
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {VIEWS.map((v) => (
-            <button
+        <div className="flex items-center gap-1.5">
+          {AUTO_VIEWS.map((v, index) => (
+            <span
               key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`px-3 py-1 rounded-full text-xs capitalize cursor-pointer transition-colors ${
-                view === v ? 'bg-white text-black' : 'bg-white/10 text-gray-200 hover:bg-white/20'
-              }`}
-            >
-              {v}
-            </button>
+              className={`h-1 rounded-full transition-all duration-500 ${index === viewIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/25'}`}
+              aria-hidden="true"
+            />
           ))}
+          <span className="ml-1 text-xs text-gray-400 capitalize">{view}</span>
         </div>
-        {view === 'split' && (
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={split}
-            onChange={(event) => setSplit(Number(event.target.value))}
-            aria-label="Move between baseline and current"
-            className="w-full accent-white cursor-pointer"
-          />
-        )}
+        <p className="text-xs text-gray-500">Baseline, current and diff, cycling automatically.</p>
       </div>
     </div>
   );

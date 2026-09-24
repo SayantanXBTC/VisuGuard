@@ -1,14 +1,53 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ShieldCheck, Menu, X, CheckCircle2 } from 'lucide-react';
 import { APP_NAME } from '../config.js';
 import Panel, { PANELS } from '../components/landing/Panels.jsx';
 
 const NAV_LINKS = PANELS.filter((panel) => panel.id !== 'hero');
 
+// One full-height, scroll-snapped section. Its own IntersectionObserver notices when it becomes
+// the section in view and bumps `visits`, which remounts the inner Panel - replaying the same
+// entrance animations (Step / animate-blur-fade-up) that used to run only on a nav click.
+function PanelSection({ panel, rootRef, onActive }) {
+  const ref = useRef(null);
+  const [visits, setVisits] = useState(0);
+  const wasVisible = useRef(panel.id === 'hero'); // the hero is already showing on load: don't replay it
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) onActive(panel.id);
+        if (entry.isIntersecting && !wasVisible.current) setVisits((v) => v + 1);
+        wasVisible.current = entry.isIntersecting;
+      },
+      { root: rootRef.current, threshold: 0.55 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [panel.id, onActive, rootRef]);
+
+  return (
+    <section
+      ref={ref}
+      data-panel={panel.id}
+      className="h-[100dvh] w-full shrink-0 snap-start flex flex-col justify-end px-4 sm:px-6 md:px-12 pb-20 md:pb-14 relative z-10"
+    >
+      <div key={visits} className="flex-1 min-w-0 flex flex-col justify-end pointer-events-none">
+        <div className="pointer-events-auto">
+          <Panel id={panel.id} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGoDashboard }) {
   const [activeId, setActiveId] = useState('hero');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showNotice, setShowNotice] = useState(Boolean(notice));
+  const scrollRef = useRef(null);
 
   useEffect(() => {
     if (!notice) return;
@@ -17,9 +56,13 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
     return () => clearTimeout(timer);
   }, [notice]);
 
+  const onActive = useCallback((id) => setActiveId(id), []);
+
+  // Nav click (or arrow) scrolls the matching section into view; the IntersectionObserver
+  // above then picks up the new active section and replays its entrance animation.
   const show = (id) => {
     setMenuOpen(false);
-    setActiveId(id);
+    scrollRef.current?.querySelector(`[data-panel="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const accountButtons = loggedIn ? (
@@ -50,7 +93,7 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
   );
 
   return (
-    <div className="relative w-screen h-[100dvh] overflow-hidden bg-black text-white font-['Inter',sans-serif] flex flex-col select-none">
+    <div className="relative w-screen h-[100dvh] bg-black text-white font-['Inter',sans-serif] select-none">
       <video
         className="fixed inset-0 w-full h-full object-cover z-0 pointer-events-none"
         src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260406_094145_4a271a6c-3869-4f1c-8aa7-aeb0cb227994.mp4"
@@ -79,7 +122,7 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
         </div>
       )}
 
-      <header className="relative z-50 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 md:py-6 shrink-0">
+      <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 md:py-6">
         <button
           type="button"
           onClick={() => show('hero')}
@@ -126,7 +169,7 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
 
       {/* Menu for screens below lg */}
       <div
-        className={`absolute top-[72px] inset-x-0 z-40 transition-all duration-300 ease-out ${
+        className={`fixed top-[72px] inset-x-0 z-40 transition-all duration-300 ease-out ${
           menuOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : '-translate-y-4 opacity-0 invisible pointer-events-none'
         }`}
       >
@@ -147,14 +190,11 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
         </div>
       </div>
 
-      {/* The screen for the chosen link, bottom left. It scrolls only when the window is too small for it. */}
-      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col px-4 sm:px-6 md:px-12 pb-20 md:pb-14 z-10 relative">
-        <div className="mt-auto">
-          <div key={activeId} className="flex-1 min-w-0">
-            <Panel id={activeId} />
-          </div>
-
-        </div>
+      {/* Scroll through the sections, or use the nav above / arrow keys - both land on the same sections. */}
+      <main ref={scrollRef} className="relative z-10 h-full overflow-y-auto snap-y snap-mandatory scroll-smooth">
+        {PANELS.map((panel) => (
+          <PanelSection key={panel.id} panel={panel} rootRef={scrollRef} onActive={onActive} />
+        ))}
       </main>
     </div>
   );

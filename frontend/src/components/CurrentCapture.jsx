@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, Globe, RotateCw } from 'lucide-react';
+import { ArrowRight, Globe, RotateCw, Sparkles } from 'lucide-react';
 import ScreenshotGrid from './ScreenshotGrid.jsx';
 import WorkingScreen from './WorkingScreen.jsx';
 import { Badge, Button, Field, FlowStep } from './ui.jsx';
 import { capturedPages, failedPages, pageCountText, isValidHttpUrl } from '../helpers.js';
 
 const fade = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 4 }, transition: { duration: 0.22 } };
+const DEMO_URL = 'https://demochanged.vercel.app';
 
 // Step 2: the new deployment. "Capture & Compare" captures it, analyzes it and opens the report, in one go.
 // another: "Compare Another URL": the same form for a further deployment. The baseline is only shown, never asked for.
@@ -14,6 +15,12 @@ function CurrentCapture({ test, starting, startError, onCapture, another = false
   const [currentUrl, setCurrentUrl] = useState(another ? '' : test.current_url || '');
   const [urlError, setUrlError] = useState('');
   const [showPages, setShowPages] = useState(false);
+  const isDemoBaseline = test.baseline_url?.includes('demobaseline.vercel.app');
+
+  function useDemoUrl() {
+    setCurrentUrl(DEMO_URL);
+    setUrlError('');
+  }
 
   const pages = test.current_pages || [];
   const captured = capturedPages(pages);
@@ -75,6 +82,13 @@ function CurrentCapture({ test, starting, startError, onCapture, another = false
               error={urlError}
               valid={isValidHttpUrl(currentUrl)}
             />
+
+            {isDemoBaseline && !currentUrl && (
+              <button type="button" className="demo-fill-hint" onClick={useDemoUrl}>
+                <Sparkles size={13} aria-hidden="true" />
+                Use the matching demo deployment ({DEMO_URL.replace('https://', '')})
+              </button>
+            )}
 
             <div className="step-actions">
               <Button type="submit" variant="primary" icon={retry ? RotateCw : undefined} loading={starting}>

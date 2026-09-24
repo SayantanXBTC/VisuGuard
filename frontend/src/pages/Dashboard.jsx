@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus } from 'lucide-react';
+import { Plus, Layers, Loader2, CheckCircle2, Eye } from 'lucide-react';
 import AppBackground from '../components/AppBackground.jsx';
 import Topbar from '../components/Topbar.jsx';
 import { Button, SectionHeader } from '../components/ui.jsx';
@@ -108,6 +108,16 @@ function Dashboard({ user, onLogout }) {
   const running = tests.filter((test) => isRunning(test.status)).length;
   const summary = tests.length > 0 ? `${tests.length} ${tests.length === 1 ? 'test' : 'tests'}${running > 0 ? ` · ${running} running` : ''}` : null;
 
+  // Home screen stat cards, counted from the same saved tests
+  const completed = tests.filter((test) => test.status === 'completed').length;
+  const changesFound = tests.reduce((sum, test) => sum + (test.pages_changed || 0), 0);
+  const stats = [
+    { icon: Layers, label: 'Total tests', value: tests.length },
+    { icon: Loader2, label: 'Running now', value: running, spin: running > 0 },
+    { icon: CheckCircle2, label: 'Completed', value: completed },
+    { icon: Eye, label: 'Changes found', value: changesFound },
+  ];
+
   // Each screen fades and rises in
   const page = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.2, 0.7, 0.2, 1] } }, exit: { opacity: 0, y: -4, transition: { duration: 0.12 } } };
 
@@ -133,6 +143,20 @@ function Dashboard({ user, onLogout }) {
                 </div>
                 <Button variant="primary" size="lg" icon={Plus} onClick={startNewTest}>New Test</Button>
               </header>
+
+              {tests.length > 0 && (
+                <div className="stat-row">
+                  {stats.map(({ icon: Icon, label, value, spin }) => (
+                    <div className="stat-card" key={label}>
+                      <Icon size={17} className={spin ? 'stat-icon stat-icon-spin' : 'stat-icon'} aria-hidden="true" />
+                      <div>
+                        <strong>{value}</strong>
+                        <span>{label}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <SectionHeader
                 title="Recent tests"
