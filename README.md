@@ -232,21 +232,23 @@ In development, Vite proxies `/api` and `/files` to the backend, so no CORS setu
 
 ### 4. Try it with the demo sites
 
+Two tiny demo sites exist so the pipeline can be shown without a real website. They're also deployed publicly, so they work against the live app too, not just local dev (a locally-run backend can't reach a deployed backend's `localhost`, and vice versa):
+
 ```bash
 cd demo-sites
 node server.js
 ```
 
-| Site | URL | Use as |
-|---|---|---|
-| baseline | http://localhost:4100 | Baseline URL |
-| changed | http://localhost:4101 | Current URL |
+| Site | Local URL | Live URL | Use as |
+|---|---|---|---|
+| baseline | http://localhost:4100 | https://demobaseline.vercel.app | Baseline URL |
+| changed | http://localhost:4101 | https://demochanged.vercel.app | Current URL |
 
-1. Sign in and click **Start New Test**. Enter `http://localhost:4100`.
+1. Sign in and click **Start New Test**. Enter the baseline URL (local or live, matching where you're running the app).
 2. Click **Create Baseline**, then **Capture Baseline**.
-3. Enter `http://localhost:4101` and click **Capture & Compare**. The report opens by itself.
+3. Enter the changed URL and click **Capture & Compare**. The report opens by itself.
 4. Click a screenshot to enlarge it, use the slider to compare, click **Export PDF**.
-5. Click **Compare Another URL** and enter `http://localhost:4100` again: an identical site, so nothing changes, and both reports appear in the history.
+5. Click **Compare Another URL** and enter the baseline URL again: an identical site, so nothing changes, and both reports appear in the history.
 
 Expected result (values can differ slightly by machine because of fonts):
 
