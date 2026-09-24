@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: visuguard-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: visuguard-storage
+      mountPath: /app/storage
+      sizeGB: 5
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: MAX_PAGES
+        value: "10"
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: claude-sonnet-5
+      - key: AI_TIMEOUT_MS
+        value: "90000"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: EDITH_BACKUP_MODEL
+        value: claude-haiku-4-5-20251001
