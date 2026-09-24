@@ -68,6 +68,84 @@
   height: 34px;
 }
 
+/* ---------- Little bits of personality ---------- */
+
+.edith-launcher-face {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Every so often she fidgets: a quick tilt and hop, then back to still */
+.edith-avatar-launcher {
+  animation: edith-fidget 9s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+
+@keyframes edith-fidget {
+  0%, 86%, 100% { transform: none; }
+  89% { transform: rotate(-12deg) translateY(-2px); }
+  92% { transform: rotate(10deg) translateY(-3px); }
+  95% { transform: rotate(-5deg); }
+}
+
+/* Hovering her button: she waves */
+.edith-launcher:hover .edith-avatar-launcher {
+  animation: edith-wave 0.9s ease-in-out;
+}
+
+@keyframes edith-wave {
+  0%, 100% { transform: none; }
+  20% { transform: rotate(-16deg); }
+  40% { transform: rotate(12deg); }
+  60% { transform: rotate(-10deg); }
+  80% { transform: rotate(6deg); }
+}
+
+/* Watching a capture or analysis: a ring orbits her face and the button glows */
+.edith-orbit {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, #ff9d6e 90deg, #ffe0cf 130deg, transparent 180deg, transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  animation: edith-spin 1.1s linear infinite;
+}
+
+@keyframes edith-spin {
+  to { transform: rotate(360deg); }
+}
+
+.edith-launcher-busy {
+  border-color: rgba(255, 157, 110, 0.45);
+  box-shadow: 0 0 0 0 rgba(255, 140, 90, 0.5);
+  animation: edith-busy-glow 2s ease-in-out infinite;
+}
+
+.edith-launcher-busy .edith-avatar-launcher {
+  animation: edith-bob 1.4s ease-in-out infinite;
+}
+
+@keyframes edith-busy-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 140, 90, 0.35); }
+  50% { box-shadow: 0 0 22px 2px rgba(255, 140, 90, 0.4); }
+}
+
+@keyframes edith-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px) rotate(-3deg); }
+}
+
+.edith-launcher-label {
+  display: inline-block;
+  min-width: 64px;
+}
+
+/* In the chat: she bobs while thinking (and nods when she's done, via framer-motion) */
+.edith-avatar-thinking {
+  animation: edith-bob 1.1s ease-in-out infinite;
+}
+
 /* ---------- The hello: Edith hops out of her button, says hi, hops back ---------- */
 
 .edith-greet {
@@ -417,7 +495,13 @@
 @media (prefers-reduced-motion: reduce) {
   .edith-msg,
   .edith-typing i,
-  .edith-caret {
+  .edith-caret,
+  .edith-avatar-launcher,
+  .edith-launcher:hover .edith-avatar-launcher,
+  .edith-launcher-busy,
+  .edith-launcher-busy .edith-avatar-launcher,
+  .edith-avatar-thinking,
+  .edith-orbit {
     animation: none;
   }
 }

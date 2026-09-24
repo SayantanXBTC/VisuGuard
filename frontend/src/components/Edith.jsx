@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUp, Trash2, X } from 'lucide-react';
 import { streamChat } from '../api.js';
-import { onEdithSay } from '../edith-bus.js';
+import { onEdithBusy, onEdithSay } from '../edith-bus.js';
 import '../edith.css';
 
 const GREETING = "Hi, I'm Edith. Ask me anything about how VisuGuard works.";
@@ -12,12 +12,42 @@ const BODY = '/edith-robot.png';
 const SHOW_MS = 5200; // how long she stays out before hopping back
 const BURST = Array.from({ length: 10 }, (_, n) => (n / 10) * Math.PI * 2);
 
+// Types a line out letter by letter, starting after `delay` ms. Screen readers get the whole line at once.
+function TypeText({ text, delay = 0, speed = 22 }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setCount(text.length);
+      return undefined;
+    }
+    setCount(0);
+    let timer;
+    const start = setTimeout(() => {
+      timer = setInterval(() => setCount((n) => (n >= text.length ? n : n + 1)), speed);
+    }, delay);
+    return () => {
+      clearTimeout(start);
+      clearInterval(timer);
+    };
+  }, [text, delay, speed]);
+  return (
+    <span aria-label={text}>
+      <span aria-hidden="true">{text.slice(0, count)}</span>
+      {count < text.length && <i className="edith-caret" aria-hidden="true" />}
+    </span>
+  );
+}
+
 // Edith: the assistant in the bottom right corner. Her answers come from the backend (/api/chat), which holds the key.
 // Any screen can make her hop out and say something through edith-bus.js.
 function Edith() {
   const [open, setOpen] = useState(false);
   const [greeting, setGreeting] = useState(null); // { title, text, ask, celebrate } while she's out
+  const [busy, setBusy] = useState(null); // label while a capture or analysis runs
+  const [nod, setNod] = useState(0); // bumps when an answer finishes: her avatar nods
   const hideTimer = useRef(null);
+
+  useEffect(() => onEdithBusy(setBusy), []);
   const [messages, setMessages] = useState([{ role: 'assistant', content: GREETING }]);
   const [draft, setDraft] = useState('');
   const [waiting, setWaiting] = useState(false);
@@ -90,6 +120,7 @@ function Edith() {
       const answer = await streamChat(history.map(({ role, content }) => ({ role, content })), showAnswer, controller.signal);
       if (!answer) throw new Error('Edith could not answer right now. Please try again.');
       showAnswer(answer);
+      setNod((n) => n + 1);
     } catch (err) {
       if (controller.signal.aborted) return; // the chat was cleared: nothing to show
       // Keep whatever part of the answer already arrived, and add the problem after it
@@ -126,10 +157,17 @@ function Edith() {
             transition={{ duration: 0.25, ease: [0.2, 0.7, 0.2, 1] }}
           >
             <header className="edith-head">
-              <img className="edith-avatar" src={FACE} alt="" />
+              <motion.img
+                key={nod}
+                className={waiting ? 'edith-avatar edith-avatar-thinking' : 'edith-avatar'}
+                src={FACE}
+                alt=""
+                animate={nod ? { rotate: [0, -12, 9, -4, 0], y: [0, -4, 0, -2, 0] } : undefined}
+                transition={{ duration: 0.7, ease: 'easeOut' }}
+              />
               <div>
                 <strong>Edith</strong>
-                <span>VisuGuard assistant</span>
+                <span>{waiting ? 'Thinking…' : 'VisuGuard assistant'}</span>
               </div>
               <button className="edith-close" onClick={clearChat} disabled={!started} aria-label="Delete chat" title="Delete chat">
                 <Trash2 size={15} aria-hidden="true" />
@@ -188,7 +226,7 @@ function Edith() {
               exit={{ opacity: 0, y: 6, scale: 0.95, transition: { duration: 0.18 } }}
             >
               <strong>{greeting.title}</strong>
-              <span>{greeting.text}</span>
+              <TypeText text={greeting.text} delay={650} />
               {greeting.ask && <em>Tap to ask me</em>}
             </motion.button>
             <div className="edith-hop-wrap">
@@ -216,8 +254,9 @@ function Edith() {
                 animate={
                   greeting.celebrate
                     ? { opacity: 1, y: [90, -28, 0, -12, 0], scale: [0.35, 1.08, 1, 1.03, 1], rotate: [-8, 8, -5, 3, 0], transition: { duration: 1.2, ease: 'easeOut' } }
-                    : { opacity: 1, y: 0, scale: 1, rotate: 0, transition: { type: 'spring', stiffness: 260, damping: 14, mass: 0.9 } }
+                    : { opacity: 1, y: 0, scale: 1, rotate: [-8, 0, -3, 3, -3, 0], transition: { y: { type: 'spring', stiffness: 260, damping: 14, mass: 0.9 }, scale: { type: 'spring', stiffness: 260, damping: 14 }, rotate: { delay: 0.35, duration: 2.6, ease: 'easeInOut' } } }
                 }
+                whileHover={{ scale: 1.06, rotate: -4, transition: { type: 'spring', stiffness: 400, damping: 12 } }}
                 exit={{ opacity: 0, y: 90, scale: 0.35, rotate: 6, transition: { duration: 0.38, ease: [0.5, 0, 0.75, 0] } }}
               />
             </div>
@@ -225,9 +264,30 @@ function Edith() {
         )}
       </AnimatePresence>
 
-      <button className="edith-launcher" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? 'Close Edith' : 'Ask Edith'}>
-        <img className="edith-avatar edith-avatar-launcher" src={FACE} alt="" />
-        {!open && <span className="edith-launcher-label">Ask Edith</span>}
+      <button
+        className={busy && !open ? 'edith-launcher edith-launcher-busy' : 'edith-launcher'}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={open ? 'Close Edith' : 'Ask Edith'}
+      >
+        <span className="edith-launcher-face">
+          {busy && !open && <i className="edith-orbit" aria-hidden="true" />}
+          <img className="edith-avatar edith-avatar-launcher" src={FACE} alt="" />
+        </span>
+        {!open && (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={busy || 'idle'}
+              className="edith-launcher-label"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+            >
+              {busy || 'Ask Edith'}
+            </motion.span>
+          </AnimatePresence>
+        )}
         {open && <X size={16} aria-hidden="true" />}
       </button>
     </div>

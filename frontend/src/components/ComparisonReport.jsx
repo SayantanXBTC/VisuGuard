@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, Download, GitCompareArrows, Maximize2, RotateCw, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Download, GitCompareArrows, Maximize2, RotateCw, Sparkles, X } from 'lucide-react';
 import { downloadPdf } from '../api.js';
 import { formatDate, hostOf } from '../helpers.js';
 import CompareSlider from './CompareSlider.jsx';
@@ -16,17 +16,41 @@ const STATUS_LABEL = {
 const STATUS_TONE = { changed: 'changed', unchanged: 'done' }; // unavailable pages use the plain tone
 const SEVERITY_LABEL = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
 const SEVERITY_TONE = { low: 'captured', medium: 'warning', high: 'changed', critical: 'failed' };
+const EASE = [0.2, 0.7, 0.2, 1];
 
 const rise = {
-  hidden: { opacity: 0, y: 14 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.2, 0.7, 0.2, 1] } },
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE } },
 };
+
+const popIn = {
+  hidden: { opacity: 0, x: -14, scale: 0.96 },
+  visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 360, damping: 26 } },
+};
+
+const kindOf = (page) => (page.status === 'changed' ? 'changed' : page.status === 'unchanged' ? 'unchanged' : 'unavailable');
 
 // Why a page has no comparison
 function unavailableReason(page) {
   if (page.status === 'missing_baseline') return `Not captured in the baseline: ${page.error}`;
   if (page.status === 'missing_current') return `Not captured on the current site: ${page.error}`;
   return page.error;
+}
+
+// A number that counts up from 0 when it appears
+function CountUp({ value, decimals = 0, delay = 0, suffix = '' }) {
+  const reduce = useReducedMotion();
+  const count = useMotionValue(reduce ? value : 0);
+  const text = useTransform(count, (v) => `${v.toFixed(decimals)}${suffix}`);
+  useEffect(() => {
+    if (reduce) {
+      count.set(value);
+      return undefined;
+    }
+    const controls = animate(count, value, { duration: 1.1, delay, ease: [0.16, 1, 0.3, 1] });
+    return () => controls.stop();
+  }, [value, delay, reduce, count]);
+  return <motion.span>{text}</motion.span>;
 }
 
 // A row of options with an indicator that slides to the chosen one
@@ -43,11 +67,99 @@ function Segmented({ id, label, options, value, onChange }) {
   );
 }
 
+// Changed / unchanged / unavailable as a ring that draws itself
+function StatusDonut({ changed, unchanged, unavailable }) {
+  const total = Math.max(1, changed + unchanged + unavailable);
+  const R = 34;
+  const C = 2 * Math.PI * R;
+  const parts = [
+    { key: 'changed', value: changed, className: 'donut-changed' },
+    { key: 'unchanged', value: unchanged, className: 'donut-unchanged' },
+    { key: 'unavailable', value: unavailable, className: 'donut-unavailable' },
+  ];
+  let offset = 0;
+  return (
+    <div className="donut">
+      <svg viewBox="0 0 84 84" aria-hidden="true">
+        <circle cx="42" cy="42" r={R} className="donut-track" />
+        {parts.map((part, n) => {
+          const length = (part.value / total) * C;
+          const start = offset;
+          offset += length;
+          if (!part.value) return null;
+          return (
+            <motion.circle
+              key={part.key}
+              cx="42"
+              cy="42"
+              r={R}
+              className={part.className}
+              strokeDashoffset={-start}
+              initial={{ strokeDasharray: `0 ${C}` }}
+              animate={{ strokeDasharray: `${Math.max(0, length - 1.5)} ${C}` }}
+              transition={{ duration: 0.9, delay: 0.35 + n * 0.25, ease: EASE }}
+            />
+          );
+        })}
+      </svg>
+      <div className="donut-center">
+        <strong><CountUp value={changed} delay={0.3} /></strong>
+        <span>of {changed + unchanged} changed</span>
+      </div>
+    </div>
+  );
+}
+
+// "Assembling your report": each page's result flips in, one after another. Shown once, right after a live analysis.
+function ReportIntro({ pages, onDone }) {
+  const reduce = useReducedMotion();
+  const shown = pages.slice(0, 12);
+  useEffect(() => {
+    const total = reduce ? 0 : 450 + shown.length * 190 + 900;
+    const timer = setTimeout(onDone, total);
+    return () => clearTimeout(timer);
+  }, [reduce, shown.length, onDone]);
+
+  return (
+    <motion.div
+      className="report-intro panel"
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 1.02, filter: 'blur(8px)', transition: { duration: 0.4 } }}
+      transition={{ duration: 0.35, ease: EASE }}
+    >
+      <span className="report-intro-glow" aria-hidden="true" />
+      <div className="report-intro-head">
+        <Sparkles size={18} className="report-intro-icon" aria-hidden="true" />
+        <div>
+          <strong>Assembling your report</strong>
+          <span>Every page, checked pixel by pixel.</span>
+        </div>
+        <button className="link-button" onClick={onDone}>Skip</button>
+      </div>
+      <div className="report-intro-grid">
+        {shown.map((page, n) => (
+          <motion.div
+            key={page.index}
+            className={`intro-tile intro-tile-${kindOf(page)}`}
+            initial={{ opacity: 0, rotateX: -80, y: 16 }}
+            animate={{ opacity: 1, rotateX: 0, y: 0 }}
+            transition={{ delay: 0.3 + n * 0.19, type: 'spring', stiffness: 260, damping: 20 }}
+          >
+            <span className="mono">{page.path}</span>
+            <strong>{kindOf(page) === 'unavailable' ? 'N/A' : `${page.mismatchPercentage.toFixed(2)}%`}</strong>
+            <em>{STATUS_LABEL[page.status]}</em>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 // The optional AI part of one page. The pixel result comes from Resemble.js; this is the AI's description of it.
 function Findings({ page }) {
   const ai = page.ai_analysis;
 
-  if (page.status === 'unchanged') return null;
   if (page.status !== 'changed') return null;
   if (!ai) return <p className="findings-note">AI findings were not run for this report.</p>;
 
@@ -60,31 +172,33 @@ function Findings({ page }) {
   }
 
   return (
-    <div className="findings">
+    <motion.div className="findings" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25, duration: 0.4, ease: EASE }}>
       <div className="findings-head">
-        <strong>Findings</strong>
+        <Sparkles size={15} className="findings-spark" aria-hidden="true" />
+        <strong>AI findings</strong>
         <Badge tone={SEVERITY_TONE[ai.severity] || 'neutral'}>{SEVERITY_LABEL[ai.severity]} severity</Badge>
         {ai.categories.map((category) => <span key={category} className="chip">{category}</span>)}
       </div>
       <p className="findings-summary">{ai.summary}</p>
       {ai.observations.length > 0 && (
         <ul className="findings-list">
-          {ai.observations.map((line, i) => <li key={i}>{line}</li>)}
+          {ai.observations.map((line, i) => (
+            <motion.li key={i} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35 + i * 0.06 }}>{line}</motion.li>
+          ))}
         </ul>
       )}
       <p className="findings-foot">
         Described by an AI model from the screenshots, confidence {Math.round(ai.confidence * 100)}%. It can be wrong; the pixel result comes from Resemble.js.
       </p>
-    </div>
+    </motion.div>
   );
 }
 
 // One screenshot in a dark frame. Tall pages scroll inside the frame. Click (or the button) to see it full screen.
-// A shimmering skeleton fills the frame until the image has actually loaded, so switching between
-// Baseline / Current / Diff never shows a blank or half-drawn frame.
+// A shimmering skeleton fills the frame until the image has actually loaded.
 function Frame({ label, src, onOpen }) {
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => setLoaded(false), [src]); // reset when the tab (baseline/current/diff) changes
+  useEffect(() => setLoaded(false), [src]);
 
   if (!src) return <div className="frame-empty">No {label.toLowerCase()} image</div>;
   return (
@@ -124,7 +238,7 @@ function Lightbox({ image, onClose }) {
 
   return (
     <motion.div className="lightbox-backdrop" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-      <motion.div className="lightbox" onClick={(event) => event.stopPropagation()} initial={{ scale: 0.98 }} animate={{ scale: 1 }} exit={{ scale: 0.98 }} transition={{ duration: 0.2 }}>
+      <motion.div className="lightbox" onClick={(event) => event.stopPropagation()} initial={{ scale: 0.96, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97 }} transition={{ duration: 0.22, ease: EASE }}>
         <div className="lightbox-bar">
           <span>{image.label}</span>
           <Button size="sm" variant="ghost" icon={X} onClick={onClose} autoFocus>Close</Button>
@@ -137,11 +251,11 @@ function Lightbox({ image, onClose }) {
   );
 }
 
-// One page of the report: result, the screenshots in five views, and the optional AI findings.
-function PageCard({ page, onOpen }) {
+const VIEWS = [['diff', 'Diff'], ['slider', 'Slider'], ['baseline', 'Baseline'], ['current', 'Current'], ['all', 'Side by side']];
+
+// The selected page: its result, the screenshots in five views, and the optional AI findings.
+function PageDetail({ page, view, onView, onOpen, position, total, onPrev, onNext }) {
   const compared = page.status === 'changed' || page.status === 'unchanged';
-  const [open, setOpen] = useState(page.status === 'changed'); // unchanged pages start closed to keep the report short
-  const [view, setView] = useState(page.status === 'changed' ? 'diff' : 'current');
   const hasImages = Boolean(page.baseline && page.current);
 
   const shown = {
@@ -159,67 +273,84 @@ function PageCard({ page, onOpen }) {
   };
 
   return (
-    <motion.article className="rp" variants={rise} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.08 }}>
-      <header className="rp-head">
-        <span className="rp-path mono">{page.path}</span>
-        <Badge tone={STATUS_TONE[page.status] || 'neutral'}>{STATUS_LABEL[page.status]}</Badge>
-        {compared && (
-          <span className="rp-mismatch">
-            <strong>{page.mismatchPercentage.toFixed(2)}%</strong>
-            <span className="meter"><span style={{ transform: `scaleX(${Math.min(1, Math.max(0.02, page.mismatchPercentage / 100))})` }} /></span>
-          </span>
-        )}
+    <article className={`rd rd-${kindOf(page)}`}>
+      <header className="rd-head">
+        <div className="rd-title">
+          <small>Page {position} of {total}</small>
+          <h3 className="mono">{page.path}</h3>
+          {page.title && <span className="rd-page-title">{page.title}</span>}
+        </div>
+        <div className="rd-score">
+          {compared ? (
+            <>
+              <strong><CountUp value={page.mismatchPercentage} decimals={2} suffix="%" /></strong>
+              <span>of pixels differ</span>
+              <span className="meter meter-lg">
+                <motion.span initial={{ scaleX: 0 }} animate={{ scaleX: Math.min(1, Math.max(0.02, page.mismatchPercentage / 100)) }} transition={{ duration: 0.9, ease: EASE }} />
+              </span>
+            </>
+          ) : (
+            <strong className="rd-na">N/A</strong>
+          )}
+          <Badge tone={STATUS_TONE[page.status] || 'neutral'}>{STATUS_LABEL[page.status]}</Badge>
+        </div>
+        <div className="rd-nav">
+          <button className="rd-nav-btn" onClick={onPrev} disabled={position <= 1} aria-label="Previous page"><ChevronLeft size={16} /></button>
+          <button className="rd-nav-btn" onClick={onNext} disabled={position >= total} aria-label="Next page"><ChevronRight size={16} /></button>
+        </div>
       </header>
 
       {compared && page.sameSize === false && <p className="rp-note">The page height differs between baseline and current.</p>}
       {!compared && <p className="banner banner-warning"><AlertTriangle size={14} aria-hidden="true" /> {unavailableReason(page)}</p>}
 
+      <Findings page={page} />
+
       {hasImages && (
         <>
-          <div className="rp-tools">
-            {compared && (
-              <Segmented
-                id={`view-${page.index}`}
-                label="Screenshot view"
-                value={view}
-                onChange={(id) => { setView(id); setOpen(true); }}
-                options={[['baseline', 'Baseline'], ['current', 'Current'], ['diff', 'Diff'], ['slider', 'Slider'], ['all', 'All three']]}
-              />
-            )}
-            <button className="link-button rp-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-              {open ? 'Hide screenshots' : 'Show screenshots'}
-              <ChevronDown size={14} aria-hidden="true" className={open ? 'flip' : ''} />
-            </button>
+          <div className="rd-tools">
+            <Segmented id="view" label="Screenshot view" value={view} onChange={onView} options={VIEWS} />
           </div>
-
-          <AnimatePresence initial={false}>
-            {open && (
-              <motion.div className="rp-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.div key={view} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-                    {shown[view]}
-                  </motion.div>
-                </AnimatePresence>
-              </motion.div>
-            )}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={view}
+              className="rd-view"
+              initial={{ opacity: 0, y: 8, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.22, ease: EASE }}
+            >
+              {shown[view]}
+            </motion.div>
           </AnimatePresence>
         </>
       )}
-
-      <Findings page={page} />
-    </motion.article>
+    </article>
   );
 }
 
 // Visual regression report. Every number comes from the saved results.
 // pdfPath: the API address of this report's PDF. onCompareAnother / onRetryAi: only given for the latest report.
-function ComparisonReport({ baselineUrl, currentUrl, results, pdfPath, onCompareAnother, onRetryAi }) {
+// fresh: the analysis just finished while the user watched, so the "assembling" intro plays first.
+function ComparisonReport({ baselineUrl, currentUrl, results, pdfPath, onCompareAnother, onRetryAi, fresh = false, onIntroDone }) {
+  const [intro, setIntro] = useState(Boolean(fresh));
   const [zoomed, setZoomed] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [retryingAi, setRetryingAi] = useState(false);
   const [aiError, setAiError] = useState('');
   const [filter, setFilter] = useState('all');
+  const pages = useMemo(() => results?.pages || [], [results]);
+  const [selected, setSelected] = useState(() => (pages.find((page) => page.status === 'changed') || pages[0])?.index);
+  const [view, setView] = useState(pages.some((page) => page.status === 'changed') ? 'diff' : 'current');
+  const [direction, setDirection] = useState(1);
+  const detailRef = useRef(null);
+
+  const finishIntro = useRef(() => {});
+  finishIntro.current = () => {
+    setIntro(false);
+    onIntroDone?.();
+  };
+  const endIntro = useCallback(() => finishIntro.current(), []);
 
   async function exportPdf() {
     setExporting(true);
@@ -247,74 +378,170 @@ function ComparisonReport({ baselineUrl, currentUrl, results, pdfPath, onCompare
     }
   }
 
-  if (!results) return null;
-  const { threshold, pages } = results;
-
   const changed = pages.filter((page) => page.status === 'changed').length;
   const unchanged = pages.filter((page) => page.status === 'unchanged').length;
   const compared = changed + unchanged;
   const unavailable = pages.length - compared;
+  const largest = pages.reduce((max, page) => (page.status === 'changed' && page.mismatchPercentage > max ? page.mismatchPercentage : max), 0);
   // Changed pages where the AI failed or timed out: worth asking again (nothing is captured or compared again)
   const canRetryAi = Boolean(onRetryAi) && pages.some((page) => page.status === 'changed' && page.ai_analysis && page.ai_analysis.status !== 'done' && page.ai_analysis.reason !== 'not_configured');
 
   const counts = { all: pages.length, changed, unchanged, unavailable };
-  const visiblePages = pages.filter((page) => {
-    if (filter === 'all') return true;
-    if (filter === 'unavailable') return page.status !== 'changed' && page.status !== 'unchanged';
-    return page.status === filter;
-  });
+  const visiblePages = pages.filter((page) => filter === 'all' || kindOf(page) === filter);
+  const current = visiblePages.find((page) => page.index === selected) || visiblePages[0];
+  const position = current ? visiblePages.indexOf(current) + 1 : 0;
+
+  function select(page) {
+    if (!page || page.index === current?.index) return;
+    setDirection(visiblePages.indexOf(page) > visiblePages.indexOf(current) ? 1 : -1);
+    setSelected(page.index);
+    if (window.innerWidth < 900) detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Up/down arrows move through the page list while it has focus
+  function onRailKey(event) {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const next = visiblePages[position - 1 + (event.key === 'ArrowDown' ? 1 : -1)];
+    if (next) select(next);
+  }
+
+  if (!results) return null;
 
   return (
-    <motion.section className="report" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.08 } } }}>
-      <motion.header className="report-head panel" variants={rise}>
-        <div className="report-meta">
-          <div className="meta-item"><small>Baseline</small><span className="mono" title={baselineUrl}>{hostOf(baselineUrl)}</span></div>
-          <ArrowRight size={15} aria-hidden="true" className="meta-arrow" />
-          <div className="meta-item"><small>Compared with</small><span className="mono" title={currentUrl}>{hostOf(currentUrl)}</span></div>
-          <div className="meta-item"><small>Status</small><span><Badge tone="done">Completed</Badge></span></div>
-          {results.analyzedAt && <div className="meta-item"><small>Analyzed</small><span>{formatDate(results.analyzedAt)}</span></div>}
-        </div>
+    <section className="report">
+      <AnimatePresence mode="wait">
+        {intro ? (
+          <ReportIntro key="intro" pages={pages} onDone={endIntro} />
+        ) : (
+          <motion.div key="body" className="report-body" initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
+            <motion.header className="report-head panel" variants={rise}>
+              <div className="report-meta">
+                <div className="meta-item"><small>Baseline</small><span className="mono" title={baselineUrl}>{hostOf(baselineUrl)}</span></div>
+                <ArrowRight size={15} aria-hidden="true" className="meta-arrow" />
+                <div className="meta-item"><small>Compared with</small><span className="mono" title={currentUrl}>{hostOf(currentUrl)}</span></div>
+                {results.analyzedAt && <div className="meta-item"><small>Analyzed</small><span>{formatDate(results.analyzedAt)}</span></div>}
+              </div>
 
-        <div className="report-actions">
-          <Button variant="primary" size="sm" icon={Download} onClick={exportPdf} loading={exporting}>Export PDF</Button>
-          {canRetryAi && <Button size="sm" icon={RotateCw} onClick={retryAi} loading={retryingAi} disabled={exporting}>Retry analysis</Button>}
-          {onCompareAnother && <Button size="sm" icon={GitCompareArrows} onClick={onCompareAnother} disabled={exporting || retryingAi}>Compare another URL</Button>}
-        </div>
-      </motion.header>
+              <div className="report-actions">
+                <Button variant="primary" size="sm" icon={Download} onClick={exportPdf} loading={exporting}>Export PDF</Button>
+                {canRetryAi && <Button size="sm" icon={RotateCw} onClick={retryAi} loading={retryingAi} disabled={exporting}>Retry analysis</Button>}
+                {onCompareAnother && <Button size="sm" icon={GitCompareArrows} onClick={onCompareAnother} disabled={exporting || retryingAi}>Compare another URL</Button>}
+              </div>
+            </motion.header>
 
-      {exportError && <p className="banner banner-error" role="alert">{exportError}</p>}
-      {aiError && <p className="banner banner-error" role="alert">{aiError}</p>}
+            {exportError && <p className="banner banner-error" role="alert">{exportError}</p>}
+            {aiError && <p className="banner banner-error" role="alert">{aiError}</p>}
 
-      <motion.div className="summary" variants={rise}>
-        <span className={changed > 0 ? 'verdict verdict-changed' : 'verdict verdict-clean'}>
-          {changed > 0 ? <AlertTriangle size={16} aria-hidden="true" /> : <CheckCircle2 size={16} aria-hidden="true" />}
-          {changed > 0 ? 'Visual changes detected' : 'No visual changes detected'}
-        </span>
-        <ul className="summary-stats">
-          <li><b>{compared}</b><span>compared</span></li>
-          <li className={changed > 0 ? 'stat-changed' : ''}><b>{changed}</b><span>changed</span></li>
-          <li><b>{unchanged}</b><span>unchanged</span></li>
-          <li><b>{unavailable}</b><span>unavailable</span></li>
-        </ul>
-        <span className="summary-note">Changed means more than {threshold}% of pixels differ.</span>
-      </motion.div>
+            <motion.div className={`report-hero panel ${changed > 0 ? 'report-hero-changed' : 'report-hero-clean'}`} variants={rise}>
+              <div className="report-verdict">
+                <motion.span
+                  className="verdict-icon"
+                  initial={{ scale: 0, rotate: -30 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ delay: 0.25, type: 'spring', stiffness: 300, damping: 14 }}
+                >
+                  {changed > 0 ? <AlertTriangle size={22} aria-hidden="true" /> : <CheckCircle2 size={22} aria-hidden="true" />}
+                </motion.span>
+                <div>
+                  <h2>{changed > 0 ? 'Visual changes detected' : 'No visual changes detected'}</h2>
+                  <p>
+                    {changed > 0
+                      ? `${changed} of ${compared} compared ${compared === 1 ? 'page' : 'pages'} moved past the ${results.threshold}% threshold.`
+                      : `All ${compared} compared ${compared === 1 ? 'page matches' : 'pages match'} the baseline within ${results.threshold}%.`}
+                  </p>
+                </div>
+              </div>
 
-      <motion.div variants={rise}>
-        <Segmented
-          id="filter"
-          label="Filter pages"
-          value={filter}
-          onChange={setFilter}
-          options={[['all', 'All'], ['changed', 'Changed'], ['unchanged', 'Unchanged'], ['unavailable', 'Unavailable']].filter(([id]) => counts[id] > 0 || id === 'all').map(([id, text]) => [id, text, counts[id]])}
-        />
-      </motion.div>
+              <ul className="report-stats">
+                <li><b><CountUp value={compared} delay={0.2} /></b><span>compared</span></li>
+                <li className={changed > 0 ? 'stat-changed' : ''}><b><CountUp value={changed} delay={0.3} /></b><span>changed</span></li>
+                <li><b><CountUp value={unchanged} delay={0.4} /></b><span>unchanged</span></li>
+                <li><b><CountUp value={unavailable} delay={0.5} /></b><span>unavailable</span></li>
+                {largest > 0 && <li className="stat-changed"><b><CountUp value={largest} decimals={1} suffix="%" delay={0.6} /></b><span>largest change</span></li>}
+              </ul>
 
-      <div className="report-pages">
-        {visiblePages.map((page) => <PageCard key={page.index} page={page} onOpen={(src, label) => setZoomed({ src, label })} />)}
-      </div>
+              <StatusDonut changed={changed} unchanged={unchanged} unavailable={unavailable} />
+            </motion.div>
+
+            <div className="report-split">
+              <motion.aside className="report-rail panel" variants={rise}>
+                <Segmented
+                  id="filter"
+                  label="Filter pages"
+                  value={filter}
+                  onChange={setFilter}
+                  options={[['all', 'All'], ['changed', 'Changed'], ['unchanged', 'Same'], ['unavailable', 'N/A']].filter(([id]) => counts[id] > 0 || id === 'all').map(([id, text]) => [id, text, counts[id]])}
+                />
+                <motion.ul
+                  key={filter}
+                  className="rail-list"
+                  role="listbox"
+                  aria-label="Pages"
+                  tabIndex={0}
+                  onKeyDown={onRailKey}
+                  initial="hidden"
+                  animate="visible"
+                  variants={{ visible: { transition: { staggerChildren: 0.07, delayChildren: 0.25 } } }}
+                >
+                  {visiblePages.map((page) => {
+                    const kind = kindOf(page);
+                    const active = page.index === current?.index;
+                    return (
+                      <motion.li key={page.index} variants={popIn}>
+                        <button className={active ? 'rail-item rail-item-active' : 'rail-item'} onClick={() => select(page)} role="option" aria-selected={active}>
+                          {active && <motion.span layoutId="rail-active" className="rail-active-bg" transition={{ type: 'spring', stiffness: 480, damping: 38 }} />}
+                          <span className={`rail-dot rail-dot-${kind}`} />
+                          <span className="rail-path mono">{page.path}</span>
+                          <span className="rail-pct">{kind === 'unavailable' ? 'N/A' : `${page.mismatchPercentage.toFixed(1)}%`}</span>
+                          <span className="rail-meter">
+                            <motion.span
+                              className={`rail-meter-fill rail-meter-${kind}`}
+                              initial={{ scaleX: 0 }}
+                              animate={{ scaleX: kind === 'unavailable' ? 0 : Math.min(1, Math.max(0.03, page.mismatchPercentage / Math.max(largest, 1))) }}
+                              transition={{ delay: 0.5, duration: 0.8, ease: EASE }}
+                            />
+                          </span>
+                        </button>
+                      </motion.li>
+                    );
+                  })}
+                </motion.ul>
+                <p className="rail-hint">Tip: use ↑ ↓ to move between pages.</p>
+              </motion.aside>
+
+              <motion.div className="report-detail panel" variants={rise} ref={detailRef}>
+                <AnimatePresence mode="wait" initial={false} custom={direction}>
+                  {current && (
+                    <motion.div
+                      key={current.index}
+                      custom={direction}
+                      initial={{ opacity: 0, x: 26 * direction }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -18 * direction }}
+                      transition={{ duration: 0.28, ease: EASE }}
+                    >
+                      <PageDetail
+                        page={current}
+                        view={view}
+                        onView={setView}
+                        onOpen={(src, label) => setZoomed({ src, label })}
+                        position={position}
+                        total={visiblePages.length}
+                        onPrev={() => select(visiblePages[position - 2])}
+                        onNext={() => select(visiblePages[position])}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>{zoomed && <Lightbox image={zoomed} onClose={() => setZoomed(null)} />}</AnimatePresence>
-    </motion.section>
+    </section>
   );
 }
 

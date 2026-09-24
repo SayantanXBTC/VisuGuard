@@ -49,3 +49,16 @@ export function onEdithSay(handler) {
   window.addEventListener(EVENT, listener);
   return () => window.removeEventListener(EVENT, listener);
 }
+
+// While a capture or analysis runs, Edith's button shows she's watching it. label: short text, or null when done.
+const BUSY = 'edith:busy';
+
+export function edithBusy(label) {
+  window.dispatchEvent(new CustomEvent(BUSY, { detail: label || null }));
+}
+
+export function onEdithBusy(handler) {
+  const listener = (event) => handler(event.detail);
+  window.addEventListener(BUSY, listener);
+  return () => window.removeEventListener(BUSY, listener);
+}

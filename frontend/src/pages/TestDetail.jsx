@@ -9,9 +9,10 @@ import ComparisonHistory from '../components/ComparisonHistory.jsx';
 import ComparisonReport from '../components/ComparisonReport.jsx';
 import Stepper from '../components/Stepper.jsx';
 import { Button, ErrorState, SkeletonRows, StatusBadge } from '../components/ui.jsx';
-import { edithSay, useEdithGreeting } from '../edith-bus.js';
+import { edithBusy, edithSay, useEdithGreeting } from '../edith-bus.js';
 
 const POLL_INTERVAL_MS = 1500;
+const BUSY_LABEL = { baseline: 'Watching the crawl…', current: 'Watching the capture…', analysis: 'Watching the compare…' };
 const READ_REPORT = 'How do I read the report?';
 const FIRST_REPORT_KEY = 'edith-first-report';
 
@@ -99,6 +100,15 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
     if (lastStatus.current && lastStatus.current !== test.status) reactToStatus(lastStatus.current, test);
     lastStatus.current = test.status;
   }, [test]);
+
+  // The report appeared while you watched: play its intro. Worked out during render (not in an effect),
+  // so the report already knows on its very first render.
+  const [justFinished, setJustFinished] = useState(false);
+  const [seenStatus, setSeenStatus] = useState(null);
+  if (test && test.status !== seenStatus) {
+    if (isRunning(seenStatus) && test.status === 'completed') setJustFinished(true);
+    setSeenStatus(test.status);
+  }
 
   // First look at a fresh test or a finished report, once per session each
   const firstStatus = useRef(null);
@@ -250,6 +260,12 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
   const baselineReady = capturedPages(test?.baseline_pages).length > 0;
   const currentReady = capturedPages(test?.current_pages).length > 0;
 
+  // Edith's button shows she's watching while a job runs here
+  useEffect(() => {
+    edithBusy(workKind ? BUSY_LABEL[workKind] : null);
+  }, [workKind]);
+  useEffect(() => () => edithBusy(null), []);
+
   const analysisVisible = !anotherMode && (currentReady || workKind === 'analysis');
   const showReport = test?.status === 'completed' && !workKind && !anotherMode && !viewing;
 
@@ -356,8 +372,10 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
                   currentUrl={test.current_url}
                   results={test.results}
                   pdfPath={`/tests/${test.id}/report.pdf`}
-                  onCompareAnother={() => { setAnotherMode(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  onCompareAnother={() => { setJustFinished(false); setAnotherMode(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                   onRetryAi={retryAiAnalysis}
+                  fresh={justFinished}
+                  onIntroDone={() => setJustFinished(false)}
                 />
               )}
 
