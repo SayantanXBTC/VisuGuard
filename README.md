@@ -7,7 +7,7 @@
 - Readable diff images: changed pixels tinted red, amber boxes around each change
 - Optional AI findings per changed page: summary, severity, categories, observations
 - Interactive report with a before/after slider, comparison history and PDF export
-- **Edith**, a built-in chat assistant (Google Gemini) that answers questions about the app
+- **Edith**, a built-in chat assistant (Anthropic Claude) that answers questions about the app
 - Accounts with email/password or Google sign-in. Each user only sees their own tests.
 
 ---
@@ -37,8 +37,7 @@ flowchart LR
     subgraph EXT["External services"]
         SB[("Supabase<br/>Auth + PostgreSQL")]
         Site["Websites under test<br/>(baseline URL, current URL)"]
-        Vision["AI vision model<br/>(Anthropic)"]
-        Gemini["Google Gemini"]
+        Claude["Anthropic Claude<br/>vision model + Edith chat"]
     end
 
     User --> UI
@@ -53,11 +52,11 @@ flowchart LR
     Jobs --> Comp
     Comp --> Disk
     Jobs --> AI
-    AI --> Vision
+    AI --> Claude
     API --> PDF
     PDF --> Disk
     API --> Edith
-    Edith -- "streamed answers" --> Gemini
+    Edith -- "streamed answers" --> Claude
     API -- "tests, comparisons<br/>(Row Level Security)" --> SB
 ```
 
@@ -90,7 +89,7 @@ flowchart TD
 | Comparison | Resemble.js, node-canvas (diff drawing) |
 | Auth and database | Supabase (Auth, PostgreSQL, Row Level Security) |
 | AI findings (optional) | Anthropic vision model via `@anthropic-ai/sdk` |
-| Edith assistant | Google Gemini (streamed responses) |
+| Edith assistant | Anthropic Claude via `@anthropic-ai/sdk` (streamed responses) |
 | PDF reports | PDFKit |
 
 ---
@@ -197,10 +196,10 @@ cp frontend/.env.example frontend/.env
 | `SUPABASE_ANON_KEY` | yes | Supabase anon (public) key |
 | `PORT` | no | Server port, default `3001` |
 | `MAX_PAGES` | no | Pages captured in a baseline crawl, default `10` |
-| `AI_API_KEY` | no | Enables AI findings. Leave empty to run without AI |
-| `AI_MODEL` | no | Vision model for findings |
-| `GEMINI_API_KEY` | no | Enables the Edith chat assistant |
-| `GEMINI_MODEL` | no | Preferred Gemini model for Edith |
+| `AI_API_KEY` | no | Anthropic key. Enables AI findings and the Edith chat assistant. Leave empty to run without either |
+| `AI_MODEL` | no | Vision model for findings, default `claude-sonnet-5` |
+| `AI_TIMEOUT_MS` | no | Per-request AI timeout, default `90000` |
+| `EDITH_MODEL` | no | Chat model for Edith, default `claude-haiku-4-5-20251001` |
 
 **`frontend/.env`**
 
