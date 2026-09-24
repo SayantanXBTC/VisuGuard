@@ -27,19 +27,16 @@ export async function signIn(email, password) {
 }
 
 export async function signInWithGoogle() {
-  // Get the Google URL first instead of redirecting straight away
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  // Supabase redirects the browser itself (one navigation, no extra round trip). An earlier
+  // version pre-checked the OAuth URL with a manual fetch to show a friendlier error when the
+  // provider was disabled, but that meant hitting Google's authorize endpoint twice per click -
+  // once from the check, once for the real navigation - which is fragile with an active Google
+  // session (instant SSO can complete the first, abandoned request before the second even lands).
+  const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin, skipBrowserRedirect: true },
+    options: { redirectTo: window.location.origin },
   });
   if (error) throw error;
-
-  // If Google is not enabled in the Supabase dashboard, Supabase answers 400.
-  // Catch it here so the user sees a message and not a raw JSON page.
-  const check = await fetch(data.url, { redirect: 'manual' }).catch(() => null);
-  if (check && check.status === 400) throw new Error('provider is not enabled');
-
-  window.location.assign(data.url);
 }
 
 // Sends the reset email. The link brings the user back to this app.
