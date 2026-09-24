@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { APP_NAME } from '../config.js';
 import { signIn, signUp, signInWithGoogle, resetPassword, friendlyAuthError } from '../auth.js';
 
@@ -25,6 +26,7 @@ function AuthCard({ initialMode }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(''); // text of the action in progress, '' when idle
+  const [showPassword, setShowPassword] = useState(false);
 
   function switchMode(newMode) {
     setMode(newMode);
@@ -32,6 +34,7 @@ function AuthCard({ initialMode }) {
     setMessage('');
     setPassword('');
     setConfirmPassword('');
+    setShowPassword(false);
   }
 
   function showError(text) {
@@ -88,84 +91,109 @@ function AuthCard({ initialMode }) {
     }, 'Unable to create account.');
   }
 
+  const passwordType = showPassword ? 'text' : 'password';
+
   return (
-    <div className="auth-card">
-      <span className="brand">{APP_NAME}</span>
-      <h1>{titles[mode]}</h1>
-      <p className="muted">{subtitles[mode]}</p>
+    <div className="glass-card">
+      <div className="glass-heading">
+        <span className="brand">{APP_NAME}</span>
+        <h1>{titles[mode]}</h1>
+        <p>{subtitles[mode]}</p>
+      </div>
 
       {error && <p className="banner banner-error" role="alert">{error}</p>}
       {message && <p className="banner banner-success">{message}</p>}
 
       <form onSubmit={handleSubmit} noValidate>
-        <label>
-          Email
+        <div className="float-field">
           <input
+            id="auth-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder=" "
           />
-        </label>
+          <label htmlFor="auth-email"><Mail size={16} aria-hidden="true" /> Email address</label>
+        </div>
 
         {mode !== 'forgot' && (
-          <label>
-            Password
+          <div className="float-field">
             <input
-              type="password"
+              id="auth-password"
+              type={passwordType}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              placeholder=" "
             />
-          </label>
+            <label htmlFor="auth-password"><Lock size={16} aria-hidden="true" /> Password</label>
+            <button
+              type="button"
+              className="peek-button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         )}
 
         {mode === 'signup' && (
-          <label>
-            Confirm Password
+          <div className="float-field">
             <input
-              type="password"
+              id="auth-confirm"
+              type={passwordType}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
+              placeholder=" "
             />
-          </label>
+            <label htmlFor="auth-confirm"><Lock size={16} aria-hidden="true" /> Confirm password</label>
+          </div>
         )}
 
-        <button type="submit" className="btn btn-primary btn-block" disabled={Boolean(busy)}>
+        {mode === 'signin' && (
+          <button type="button" className="glass-link glass-forgot" onClick={() => switchMode('forgot')}>
+            Forgot password?
+          </button>
+        )}
+
+        <button type="submit" className="glass-submit" disabled={Boolean(busy)}>
           {busy && busy !== GOOGLE_BUSY ? busy : submitLabels[mode]}
+          {!busy && <ArrowRight size={18} aria-hidden="true" />}
         </button>
       </form>
 
-      {mode === 'signin' && (
-        <button className="link-button forgot-link" onClick={() => switchMode('forgot')}>
-          Forgot password?
-        </button>
-      )}
-
       {mode !== 'forgot' && (
         <>
-          <div className="divider"><span>or</span></div>
+          <div className="glass-divider"><span>or continue with</span></div>
           <button
-            className="btn btn-outline btn-block"
+            type="button"
+            className="glass-google"
             onClick={() => run(GOOGLE_BUSY, signInWithGoogle, 'Unable to sign in with Google.')}
             disabled={Boolean(busy)}
           >
+            <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true">
+              <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039L38.802 8.841C34.553 4.806 29.613 2.5 24 2.5C11.983 2.5 2.5 11.983 2.5 24s9.483 21.5 21.5 21.5S45.5 36.017 45.5 24c0-1.538-.135-3.022-.389-4.417z" />
+              <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12.5 24 12.5c3.059 0 5.842 1.154 7.961 3.039l5.839-5.841C34.553 4.806 29.613 2.5 24 2.5C16.318 2.5 9.642 6.723 6.306 14.691z" />
+              <path fill="#4CAF50" d="M24 45.5c5.613 0 10.553-2.306 14.802-6.341l-5.839-5.841C30.842 35.846 27.059 38 24 38c-5.039 0-9.345-2.608-11.124-6.481l-6.571 4.819C9.642 41.277 16.318 45.5 24 45.5z" />
+              <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l5.839 5.841C44.196 35.123 45.5 29.837 45.5 24c0-1.538-.135-3.022-.389-4.417z" />
+            </svg>
             {busy === GOOGLE_BUSY ? busy : 'Continue with Google'}
           </button>
         </>
       )}
 
-      <p className="switch-mode">
+      <p className="glass-switch">
         {mode === 'signin' && (
-          <>Don&apos;t have an account? <button className="link-button" onClick={() => switchMode('signup')}>Sign Up</button></>
+          <>Don&apos;t have an account? <button type="button" className="glass-link glass-link-strong" onClick={() => switchMode('signup')}>Sign Up</button></>
         )}
         {mode === 'signup' && (
-          <>Already have an account? <button className="link-button" onClick={() => switchMode('signin')}>Sign In</button></>
+          <>Already have an account? <button type="button" className="glass-link glass-link-strong" onClick={() => switchMode('signin')}>Sign In</button></>
         )}
         {mode === 'forgot' && (
-          <button className="link-button" onClick={() => switchMode('signin')}>Back to Sign In</button>
+          <button type="button" className="glass-link glass-link-strong" onClick={() => switchMode('signin')}>Back to Sign In</button>
         )}
       </p>
     </div>

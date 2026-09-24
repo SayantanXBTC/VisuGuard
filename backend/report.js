@@ -11,6 +11,7 @@ const MARGIN = 40;
 const IMAGE_WIDTH = 165; // three images side by side fit the A4 width (3 x 165 + 2 x 10 + 2 x 40 margin)
 const IMAGE_HEIGHT = 250;
 const IMAGE_GAP = 10;
+const TEXT_WIDTH = 595.28 - 2 * MARGIN; // A4 width minus the margins
 
 const STATUS_TEXT = {
   changed: 'CHANGED',
@@ -38,6 +39,48 @@ function fileOnDisk(testId, address) {
   const file = path.join(STORAGE_DIR, address.replace(/^\/files\//, ''));
   const testFolder = path.join(STORAGE_DIR, testId) + path.sep;
   return file.startsWith(testFolder) && fs.existsSync(file) ? file : null;
+}
+
+// The built-in PDF font only has Latin-1 characters. Typographic characters from the AI text are replaced
+// by plain ones, anything else that does not exist in the font becomes "?".
+const pdfSafe = (text) =>
+  String(text)
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-')
+    .replace(/…/g, '...')
+    .replace(/[^\x20-\x7e\xa0-\xff]/g, '?');
+
+// What the PDF says about the AI analysis of one changed page: { title, summary, bullets }, or null for other pages
+function aiSection(page) {
+  if (page.status !== 'changed') return null;
+  const ai = page.ai_analysis;
+  if (ai?.status !== 'done') return { title: 'AI analysis unavailable.' };
+  return {
+    title: `AI analysis - Severity: ${ai.severity.toUpperCase()}${ai.categories.length ? ` - Categories: ${ai.categories.join(', ')}` : ''}`,
+    summary: pdfSafe(ai.summary),
+    bullets: ai.observations.map(pdfSafe),
+  };
+}
+
+// Height the AI text needs, so a page section is not split between two PDF pages
+function aiHeight(doc, section) {
+  if (!section) return 0;
+  doc.font('Helvetica-Bold').fontSize(10);
+  let height = doc.heightOfString(section.title, { width: TEXT_WIDTH }) + 6;
+  doc.font('Helvetica');
+  if (section.summary) height += doc.heightOfString(section.summary, { width: TEXT_WIDTH }) + 6;
+  for (const bullet of section.bullets || []) height += doc.heightOfString(`- ${bullet}`, { width: TEXT_WIDTH - 12 }) + 2;
+  return height;
+}
+
+function writeAiSection(doc, section) {
+  if (!section) return;
+  doc.moveDown(0.4).font('Helvetica-Bold').fontSize(10).fillColor('#3730a3').text(section.title, MARGIN, doc.y, { width: TEXT_WIDTH });
+  doc.font('Helvetica').fillColor('#000000');
+  if (section.summary) doc.text(section.summary, MARGIN, doc.y, { width: TEXT_WIDTH });
+  for (const bullet of section.bullets || []) doc.text(`- ${bullet}`, MARGIN + 12, doc.y, { width: TEXT_WIDTH - 12 });
+  doc.x = MARGIN;
 }
 
 // "2026-09-24 14:05 UTC". Plain ASCII, because the built-in PDF font has no other characters.
@@ -110,9 +153,10 @@ function writeReport(doc, { testId, baselineUrl, currentUrl, results, generatedA
   // ---- One section per page ----
   for (const page of pages) {
     const hasImages = Boolean(page.baseline || page.current || page.diff);
-    const images = [['Baseline', page.baseline], ['Current', page.current], ['Diff', page.diff]];
+    const images = [['Baseline', page.baseline], ['Current', page.current], ['Diff (changes tinted red)', page.diff]];
     const boxHeight = hasImages ? rowHeight(doc, testId, images.map(([, address]) => address)) : 0;
-    const neededHeight = hasImages ? boxHeight + 110 : 120; // 110 = the text above the images
+    const ai = aiSection(page);
+    const neededHeight = (hasImages ? boxHeight + 110 : 120) + aiHeight(doc, ai); // 110 = the text above the images
     if (doc.y + neededHeight > doc.page.height - doc.page.margins.bottom) doc.addPage();
     doc.moveDown(1.2);
 
@@ -124,6 +168,8 @@ function writeReport(doc, { testId, baselineUrl, currentUrl, results, generatedA
     if (page.sameSize === false) {
       doc.font('Helvetica').fontSize(9).fillColor('#475569').text('The page height differs between baseline and current.').fillColor('#000000');
     }
+
+    writeAiSection(doc, ai);
 
     // Unavailable pages: explain, and do not try to draw a screenshot that does not exist
     if (page.status !== 'changed' && page.status !== 'unchanged') {

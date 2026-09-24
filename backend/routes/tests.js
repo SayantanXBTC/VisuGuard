@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Router } from 'express';
 import { captureBaseline, captureCurrent, STORAGE_DIR } from '../screenshotter.js';
 import { compareScreenshots } from '../comparer.js';
+import { addAiAnalysis, aiConfigured } from '../aiAnalyzer.js';
 import { archiveComparison, undoArchive } from '../comparisons.js';
 import { sendReportPdf } from '../report.js';
 
@@ -141,6 +142,8 @@ async function runAnalysis(db, test) {
     if (compared === 0) {
       failure = `None of the ${results.pages.length} pages could be compared.`;
     } else {
+      // The AI describes the changed pages. It cannot fail the analysis: a page it cannot handle is marked unavailable.
+      await addAiAnalysis(test.id, results, (text) => runningJobs.set(test.id, text));
       // pages_tested = pages that were really compared, pages_changed = the ones above the threshold
       await updateTest(db, test.id, { status: 'completed', results, pages_tested: compared, pages_changed: changed, error_message: null });
       console.log(`[Analyze] Completed: ${compared} pages compared, ${changed} changed`);
@@ -154,14 +157,30 @@ async function runAnalysis(db, test) {
   runningJobs.delete(test.id);
 }
 
-// GET /api/tests: my tests, newest first (summary columns only)
+const countCaptured = (pages) => (Array.isArray(pages) ? pages.filter((page) => page.screenshot).length : 0);
+
+// GET /api/tests: my tests, newest first. Summary columns, plus what the list needs to show whether a test
+// can be resumed: how many baseline / current pages are saved and how many older comparisons exist.
+// The page lists themselves stay out of the answer.
 router.get('/', async (req, res) => {
   const { data, error } = await req.db
     .from('tests')
-    .select('id, baseline_url, current_url, status, error_message, pages_tested, pages_changed, created_at')
+    .select('id, baseline_url, current_url, status, error_message, pages_tested, pages_changed, created_at, baseline_pages, current_pages')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  res.json({ tests: await Promise.all(data.map((test) => healInterruptedTest(req.db, test))) });
+
+  const { data: history, error: historyError } = await req.db.from('comparisons').select('test_id');
+  if (historyError) throw historyError;
+
+  const tests = await Promise.all(data.map((test) => healInterruptedTest(req.db, test)));
+  res.json({
+    tests: tests.map(({ baseline_pages, current_pages, ...test }) => ({
+      ...test,
+      baseline_page_count: countCaptured(baseline_pages),
+      current_page_count: countCaptured(current_pages),
+      comparison_count: history.filter((row) => row.test_id === test.id).length,
+    })),
+  });
 });
 
 // POST /api/tests { baselineUrl }: create a test. Capturing is a separate step.
@@ -417,6 +436,36 @@ router.post('/:id/analyze', async (req, res) => {
   // 4. Start the analysis without waiting for it, and answer right away.
   runAnalysis(req.db, test);
   res.status(202).json({ testId: id, status: 'analyzing' });
+});
+
+// POST /api/tests/:id/retry-ai: ask the AI again for the changed pages of the finished report that have no AI
+// analysis yet. Nothing is captured or compared again: screenshots and Resemble.js results stay as they are.
+router.post('/:id/retry-ai', async (req, res) => {
+  const id = req.params.id;
+  if (!UUID.test(id)) return notFound(res);
+
+  const { data: test, error } = await req.db.from('tests').select('id, status, results').eq('id', id).maybeSingle();
+  if (error) throw error;
+  if (!test) return notFound(res);
+
+  if (runningJobs.has(id)) return res.status(409).json({ error: 'Another job is running for this test. Wait for it to finish.' });
+  if (test.status !== 'completed' || !test.results?.pages) return res.status(409).json({ error: 'There is no finished report to analyze.' });
+  if (!aiConfigured()) return res.status(409).json({ error: 'AI analysis is not configured on the server.' });
+  if (!test.results.pages.some((page) => page.status === 'changed' && page.ai_analysis?.status !== 'done')) {
+    return res.status(409).json({ error: 'Every changed page already has an AI analysis.' });
+  }
+
+  runningJobs.set(id, 'Asking the AI...'); // blocks a second click, a capture and a delete meanwhile
+  try {
+    const results = test.results;
+    await addAiAnalysis(id, results, (text) => runningJobs.set(id, text));
+    const { data: saved, error: saveError } = await req.db.from('tests').update({ results }).eq('id', id).eq('status', 'completed').select('id');
+    if (saveError) throw saveError;
+    if (saved.length === 0) return notFound(res);
+    res.json({ results });
+  } finally {
+    runningJobs.delete(id);
+  }
 });
 
 // DELETE /api/tests/:id: removes the row and the test's screenshot folder

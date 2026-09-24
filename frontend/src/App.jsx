@@ -9,6 +9,15 @@ import ResetPassword from './pages/ResetPassword.jsx';
 // The link in a password-reset email brings the user back with this in the URL
 const cameFromResetEmail = window.location.hash.includes('type=recovery');
 
+// The center of the button that was clicked: where the sign-in screen opens from
+function originOf(event) {
+  const box = event.currentTarget.getBoundingClientRect();
+  // A keyboard "click" has no mouse position, so use the middle of the button
+  return event.detail === 0 ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: event.clientX, y: event.clientY };
+}
+
+const REVEAL_MS = 1500; // how long the landing page stays under the sign-in screen while it opens
+
 // No router: `view` says which screen to show.
 // view is one of: 'landing' | 'auth' | 'dashboard' | 'reset'
 function App() {
@@ -17,6 +26,8 @@ function App() {
   const [view, setView] = useState(cameFromResetEmail ? 'reset' : 'landing');
   const [authMode, setAuthMode] = useState('signin'); // which tab the Auth page opens on
   const [notice, setNotice] = useState('');
+  const [reveal, setReveal] = useState(null); // { x, y } while the sign-in screen opens over the landing page
+  const [landingBehind, setLandingBehind] = useState(false); // keep the landing page under it until it has opened
 
   useEffect(() => {
     if (!supabase) return;
@@ -40,9 +51,18 @@ function App() {
     return stopListening;
   }, []);
 
-  function goToAuth(mode) {
+  // Removes the landing page once the sign-in screen has fully opened over it
+  useEffect(() => {
+    if (!landingBehind) return undefined;
+    const timer = setTimeout(() => setLandingBehind(false), REVEAL_MS);
+    return () => clearTimeout(timer);
+  }, [landingBehind]);
+
+  function goToAuth(mode, event) {
     setAuthMode(mode);
     setNotice('');
+    setReveal(event ? originOf(event) : null);
+    setLandingBehind(Boolean(event));
     setView('auth');
   }
 
@@ -80,19 +100,35 @@ function App() {
     return <Dashboard user={session.user} onLogout={handleLogout} />;
   }
 
-  if (view === 'auth' || view === 'dashboard') {
-    return <Auth mode={authMode} onBack={() => setView('landing')} />;
-  }
-
-  return (
+  const landing = (
     <Landing
       loggedIn={Boolean(session)}
       notice={notice}
-      onGetStarted={() => goToAuth('signup')}
-      onSignIn={() => goToAuth('signin')}
+      onGetStarted={(event) => goToAuth('signup', event)}
+      onSignIn={(event) => goToAuth('signin', event)}
       onGoDashboard={() => setView('dashboard')}
     />
   );
+
+  if (view === 'auth' || view === 'dashboard') {
+    return (
+      <>
+        {/* The page the user came from stays visible (and untouchable) while the sign-in screen opens over it */}
+        {landingBehind && <div inert aria-hidden="true">{landing}</div>}
+        <Auth
+          mode={authMode}
+          reveal={reveal}
+          onBack={() => {
+            setReveal(null);
+            setLandingBehind(false);
+            setView('landing');
+          }}
+        />
+      </>
+    );
+  }
+
+  return landing;
 }
 
 export default App;

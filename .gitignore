@@ -7,3 +7,7 @@ backend/storage/
 
 # frontend build output
 frontend/dist/
+
+# markdown files: only the root README.md goes to GitHub
+*.md
+!/README.md

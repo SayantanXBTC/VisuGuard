@@ -11,8 +11,8 @@ function ScreenshotGrid({ testId, pages }) {
               <img src={src} alt={`Screenshot of ${page.path}`} loading="lazy" />
             </a>
             <figcaption>
-              <strong>{page.title || page.path}</strong>
-              <span className="muted">{page.path}</span>
+              <span className="mono">{page.path}</span>
+              <span>{page.title}</span>
             </figcaption>
           </figure>
         );

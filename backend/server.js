@@ -5,6 +5,7 @@ import { requireUser } from './auth.js';
 import { STORAGE_DIR } from './screenshotter.js';
 import testsRouter from './routes/tests.js';
 import comparisonsRouter from './routes/comparisons.js';
+import chatRouter from './routes/chat.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -20,6 +21,9 @@ app.use('/files', express.static(STORAGE_DIR));
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, supabaseConfigured });
 });
+
+// Edith, the in-app assistant (public: the home and sign-in screens use it too)
+app.use('/api/chat', chatRouter);
 
 // Test management. requireUser rejects requests without a valid Supabase token.
 app.use('/api/tests', requireUser, testsRouter);

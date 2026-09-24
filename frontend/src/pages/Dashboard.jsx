@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import Sidebar from '../components/Sidebar.jsx';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus } from 'lucide-react';
+import AppBackground from '../components/AppBackground.jsx';
+import Topbar from '../components/Topbar.jsx';
+import { Button, SectionHeader } from '../components/ui.jsx';
 import TestForm from '../components/TestForm.jsx';
 import TestHistory from '../components/TestHistory.jsx';
 import DeleteDialog from '../components/DeleteDialog.jsx';
 import TestDetail from './TestDetail.jsx';
 import { listTests, deleteTest } from '../api.js';
+import { isRunning } from '../helpers.js';
+import '../app.css';
 
 const RECENT_COUNT = 5;
 
@@ -78,6 +84,11 @@ function Dashboard({ user, onLogout }) {
     }
   }
 
+  function startNewTest() {
+    setNotice('');
+    setView('newTest');
+  }
+
   function handleSidebarSelect(section) {
     setNotice('');
     setView(section === 'history' ? 'history' : 'home');
@@ -89,54 +100,79 @@ function Dashboard({ user, onLogout }) {
     onRetry: () => loadTests(),
     onOpen: openTest,
     onDelete: askToDelete,
+    onNewTest: startNewTest,
   };
   const sidebarSection = view === 'history' || view === 'testDetail' ? 'history' : 'dashboard';
 
+  // A quiet summary line, counted from the saved tests
+  const running = tests.filter((test) => isRunning(test.status)).length;
+  const summary = tests.length > 0 ? `${tests.length} ${tests.length === 1 ? 'test' : 'tests'}${running > 0 ? ` · ${running} running` : ''}` : null;
+
+  // Each screen fades and rises in
+  const page = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.2, 0.7, 0.2, 1] } }, exit: { opacity: 0, y: -4, transition: { duration: 0.12 } } };
+
   return (
-    <div className="dashboard">
-      <Sidebar section={sidebarSection} onSelect={handleSidebarSelect} user={user} onLogout={onLogout} />
+    <div className="app">
+      <AppBackground />
+      <Topbar
+        section={sidebarSection}
+        onSelect={handleSidebarSelect}
+        onNewTest={startNewTest}
+        user={user}
+        onLogout={onLogout}
+      />
 
-      <main className="workspace">
-        {view === 'home' && (
-          <div className="content">
-            <div className="page-header">
-              <h1>Visual Regression Testing</h1>
-              <p className="muted">Capture an approved website and compare future deployments against it.</p>
-              <button className="btn btn-primary btn-large" onClick={() => setView('newTest')}>
-                Start New Test
-              </button>
-            </div>
+      <main className="app-main">
+        <AnimatePresence mode="wait">
+          {view === 'home' && (
+            <motion.div key="home" className="content" {...page}>
+              <header className="page-head">
+                <div>
+                  <h1>Visual Regression Testing</h1>
+                  <p className="page-lead">Capture an approved website and compare future deployments against it.</p>
+                </div>
+                <Button variant="primary" size="lg" icon={Plus} onClick={startNewTest}>New Test</Button>
+              </header>
 
-            <h2 className="section-title">Recent Tests</h2>
-            <TestHistory tests={tests.slice(0, RECENT_COUNT)} {...list} />
-            {tests.length > RECENT_COUNT && (
-              <button className="link-button" onClick={() => setView('history')}>View all tests</button>
-            )}
-          </div>
-        )}
+              <SectionHeader
+                title="Recent tests"
+                note={summary}
+                action={tests.length > RECENT_COUNT && <button className="link-button" onClick={() => setView('history')}>View all</button>}
+              />
+              <TestHistory tests={tests.slice(0, RECENT_COUNT)} {...list} />
+            </motion.div>
+          )}
 
-        {view === 'newTest' && (
-          <div className="content">
-            <TestForm onCreated={handleCreated} onCancel={() => setView('home')} />
-          </div>
-        )}
+          {view === 'newTest' && (
+            <motion.div key="new" className="content content-narrow" {...page}>
+              <TestForm onCreated={handleCreated} onCancel={() => setView('home')} />
+            </motion.div>
+          )}
 
-        {view === 'history' && (
-          <div className="content">
-            <h1 className="page-title">Test History</h1>
-            <TestHistory tests={tests} {...list} />
-          </div>
-        )}
+          {view === 'history' && (
+            <motion.div key="history" className="content" {...page}>
+              <header className="page-head">
+                <div>
+                  <h1>Test History</h1>
+                  <p className="page-lead">Every test in your workspace, newest first.</p>
+                </div>
+              </header>
+              <TestHistory tests={tests} {...list} />
+            </motion.div>
+          )}
 
-        {view === 'testDetail' && (
-          <TestDetail
-            key={openTestId}
-            testId={openTestId}
-            notice={notice}
-            onBack={() => setView('history')}
-            onDelete={askToDelete}
-          />
-        )}
+          {view === 'testDetail' && (
+            <motion.div key={`detail-${openTestId}`} className="content" {...page}>
+              <TestDetail
+                key={openTestId}
+                testId={openTestId}
+                notice={notice}
+                onBack={() => setView('history')}
+                onDelete={askToDelete}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
       {testToDelete && (

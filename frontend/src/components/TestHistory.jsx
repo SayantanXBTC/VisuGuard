@@ -1,33 +1,30 @@
+import { motion } from 'framer-motion';
+import { Plus } from 'lucide-react';
 import TestCard from './TestCard.jsx';
+import { Button, EmptyState, ErrorState, SkeletonRows } from './ui.jsx';
 
-// A list of tests with loading, error and empty states. Used on Home (recent) and Test History (all).
-function TestHistory({ tests, loading, error, onRetry, onOpen, onDelete }) {
-  if (loading) return <p className="muted">Loading tests...</p>;
+// A list of tests with loading, error and empty states. Used on Dashboard (recent) and Test History (all).
+function TestHistory({ tests, loading, error, onRetry, onOpen, onDelete, onNewTest }) {
+  if (loading) return <SkeletonRows label="Loading tests" />;
 
-  if (error) {
-    return (
-      <div>
-        <p className="banner banner-error" role="alert">{error}</p>
-        <button className="btn btn-outline" onClick={onRetry}>Try again</button>
-      </div>
-    );
-  }
+  if (error) return <ErrorState title="Unable to load your tests." text={error} onRetry={onRetry} />;
 
   if (tests.length === 0) {
     return (
-      <div className="empty-state empty-state-box">
-        <h2>No tests yet.</h2>
-        <p>Start your first visual regression test to see your results here.</p>
-      </div>
+      <EmptyState
+        title="No visual tests yet."
+        text="Create a test to capture your first baseline."
+        action={<Button variant="primary" icon={Plus} onClick={onNewTest}>New Test</Button>}
+      />
     );
   }
 
   return (
-    <ul className="test-list">
+    <motion.ul className="test-list" initial="hidden" animate="visible" transition={{ staggerChildren: 0.09, delayChildren: 0.25 }}>
       {tests.map((test) => (
         <TestCard key={test.id} test={test} onOpen={onOpen} onDelete={onDelete} />
       ))}
-    </ul>
+    </motion.ul>
   );
 }
 

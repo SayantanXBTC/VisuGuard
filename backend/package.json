@@ -10,7 +10,9 @@
     "canvas": "^3.0.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@supabase/supabase-js": "^2.117.1",
+    "canvas": "^3.2.3",
     "express": "^5.2.1",
     "pdfkit": "^0.20.2",
     "playwright": "^1.63.0",

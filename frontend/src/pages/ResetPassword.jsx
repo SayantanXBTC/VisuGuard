@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { ArrowRight, Lock } from 'lucide-react';
+import SmokeyBackground from '../components/SmokeyBackground.jsx';
+import '../auth.css';
 import { APP_NAME } from '../config.js';
 import { updatePassword, friendlyAuthError } from '../auth.js';
 
@@ -29,45 +32,52 @@ function ResetPassword({ session, onDone, onBack }) {
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <span className="brand">{APP_NAME}</span>
-        <h1>Choose a new password</h1>
-
-        {!session && (
-          <>
-            <p className="banner banner-error">This reset link is invalid or has expired.</p>
-            <button className="btn btn-outline btn-block" onClick={onBack}>Back to home</button>
-          </>
-        )}
-
-        {session && updated && (
-          <>
-            <p className="banner banner-success">Password updated successfully.</p>
-            <button className="btn btn-primary btn-block" onClick={onDone}>Continue to Dashboard</button>
-          </>
-        )}
-
-        {session && !updated && (
-          <>
-            {error && <p className="banner banner-error" role="alert">{error}</p>}
-            <form onSubmit={handleSubmit} noValidate>
-              <label>
-                New Password
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
-              </label>
-              <label>
-                Confirm New Password
-                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
-              </label>
-              <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-                {busy ? 'Updating password...' : 'Update Password'}
-              </button>
-            </form>
-          </>
-        )}
+    <main className="auth-stage auth-stage-fade">
+      <div className="auth-backdrop">
+        <SmokeyBackground />
       </div>
-    </div>
+      <div className="auth-content">
+        <div className="glass-card">
+          <div className="glass-heading">
+            <span className="brand">{APP_NAME}</span>
+            <h1>Choose a new password</h1>
+          </div>
+
+          {!session && (
+            <>
+              <p className="banner banner-error">This reset link is invalid or has expired.</p>
+              <button className="glass-google" onClick={onBack}>Back to home</button>
+            </>
+          )}
+
+          {session && updated && (
+            <>
+              <p className="banner banner-success">Password updated successfully.</p>
+              <button className="glass-submit" onClick={onDone}>Continue to Dashboard <ArrowRight size={18} aria-hidden="true" /></button>
+            </>
+          )}
+
+          {session && !updated && (
+            <>
+              {error && <p className="banner banner-error" role="alert">{error}</p>}
+              <form onSubmit={handleSubmit} noValidate>
+                <div className="float-field">
+                  <input id="reset-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder=" " />
+                  <label htmlFor="reset-password"><Lock size={16} aria-hidden="true" /> New password</label>
+                </div>
+                <div className="float-field">
+                  <input id="reset-confirm" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" placeholder=" " />
+                  <label htmlFor="reset-confirm"><Lock size={16} aria-hidden="true" /> Confirm new password</label>
+                </div>
+                <button type="submit" className="glass-submit" disabled={busy}>
+                  {busy ? 'Updating password...' : 'Update Password'}
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+      </div>
+    </main>
   );
 }
 

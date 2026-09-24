@@ -1,59 +1,55 @@
-import ComparisonReport from './ComparisonReport.jsx';
+import { AnimatePresence, motion } from 'framer-motion';
+import { RotateCw, ScanSearch } from 'lucide-react';
+import WorkingScreen from './WorkingScreen.jsx';
+import { Badge, Button, FlowStep } from './ui.jsx';
+import { capturedPages } from '../helpers.js';
 
-// The "Analyze Changes" step. What it shows depends on the test status.
-// Only shown after both captures are finished.
-function AnalysisPanel({ test, progress, starting, startError, onAnalyze, onCompareAnother }) {
+const fade = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 4 }, transition: { duration: 0.22 } };
+
+// Step 3: the analysis. The button, the live state while it runs, a failure, or the one-line result.
+// The report itself is shown below the workflow (TestDetail).
+function AnalysisPanel({ test, starting, startError, onAnalyze, running, progress }) {
   const canAnalyze = test.status === 'current_captured';
-  const analysisFailed = test.status === 'failed'; // this panel only exists once the current version was captured
+  const failed = test.status === 'failed' && !running; // this step only exists once the current version was captured
+  const completed = test.status === 'completed' && !running;
+
+  const mode = running ? 'running' : completed ? 'done' : failed ? 'failed' : 'idle';
+  const baselinePaths = capturedPages(test.baseline_pages).map((page) => page.path);
 
   return (
-    <>
-      {(canAnalyze || analysisFailed) && (
-        <section className="panel">
-          <h2>Analyze Changes</h2>
+    <FlowStep
+      state={completed ? 'done' : failed ? 'failed' : 'active'}
+      title="Analysis"
+      badge={completed && <Badge tone="done">Completed</Badge>}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {mode === 'running' && <WorkingScreen key="running" kind="analysis" progress={progress} pages={baselinePaths} />}
 
-          {analysisFailed && (
-            <p className="banner banner-error" role="alert">
-              <strong>Analysis failed.</strong>
-              <br />
-              {test.error_message || 'Something went wrong.'}
-            </p>
-          )}
-          {startError && <p className="banner banner-error" role="alert">{startError}</p>}
-
-          <p className="muted">
-            Compare the baseline screenshots with the current screenshots, page by page. Nothing is captured again.
-          </p>
-          <button className="btn btn-primary" onClick={onAnalyze} disabled={starting}>
-            {starting ? 'Starting...' : analysisFailed ? 'Try Again' : 'Analyze Changes'}
-          </button>
-        </section>
-      )}
-
-      {test.status === 'analyzing' && (
-        <section className="panel">
-          <div className="capturing">
-            <span className="spinner" aria-hidden="true" />
-            <div>
-              <h3>Analyzing Visual Changes</h3>
-              <p className="muted">Comparing your baseline and current screenshots...</p>
-              <p className="muted">Generating visual difference images...</p>
-              {progress && <p className="progress-text">{progress}</p>}
+        {(mode === 'idle' || mode === 'failed') && (canAnalyze || failed) && (
+          <motion.div key="idle" {...fade}>
+            {failed && (
+              <>
+                <p className="step-text step-text-error">Analysis failed.</p>
+                <p className="step-text">{test.error_message || 'Something went wrong.'}</p>
+              </>
+            )}
+            {!failed && <p className="step-text">Compare the baseline and current screenshots, page by page. Nothing is captured again.</p>}
+            {startError && <p className="banner banner-error" role="alert">{startError}</p>}
+            <div className="step-actions">
+              <Button variant="primary" icon={failed ? RotateCw : ScanSearch} onClick={onAnalyze} loading={starting}>
+                {failed ? 'Try Again' : 'Analyze Changes'}
+              </Button>
             </div>
-          </div>
-        </section>
-      )}
+          </motion.div>
+        )}
 
-      {test.status === 'completed' && (
-        <ComparisonReport
-          baselineUrl={test.baseline_url}
-          currentUrl={test.current_url}
-          results={test.results}
-          pdfPath={`/tests/${test.id}/report.pdf`}
-          onCompareAnother={onCompareAnother}
-        />
-      )}
-    </>
+        {mode === 'done' && (
+          <motion.p key="done" className="step-summary" {...fade}>
+            Comparison complete <span className="step-dim">· {test.pages_changed} of {test.pages_tested} pages changed</span>
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </FlowStep>
   );
 }
 

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { getTest, captureBaseline, captureCurrent, analyzeTest, listComparisons, getComparison } from '../api.js';
-import { capturedPages, formatDate, isRunning, statusLabel, statusTone } from '../helpers.js';
+import { ArrowLeft, Trash2 } from 'lucide-react';
+import { getTest, captureBaseline, captureCurrent, analyzeTest, retryAi, listComparisons, getComparison } from '../api.js';
+import { capturedPages, formatDate, isRunning } from '../helpers.js';
 import BaselineCapture from '../components/BaselineCapture.jsx';
 import CurrentCapture from '../components/CurrentCapture.jsx';
 import AnalysisPanel from '../components/AnalysisPanel.jsx';
 import ComparisonHistory from '../components/ComparisonHistory.jsx';
 import ComparisonReport from '../components/ComparisonReport.jsx';
+import Stepper from '../components/Stepper.jsx';
+import { Button, ErrorState, SkeletonRows, StatusBadge } from '../components/ui.jsx';
 
 const POLL_INTERVAL_MS = 1500;
 
@@ -18,6 +21,7 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState('');
   const [connectionLost, setConnectionLost] = useState(false); // polling keeps failing
+  const [reloadKey, setReloadKey] = useState(0); // bumped by "Retry" after a failed load
 
   // Compare Another URL
   const [anotherMode, setAnotherMode] = useState(false); // showing the form for another deployment
@@ -50,7 +54,7 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
     return () => {
       ignore = true;
     };
-  }, [testId]);
+  }, [testId, reloadKey]);
 
   // The list of older comparisons
   function loadComparisons() {
@@ -124,7 +128,7 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
         error_message: null,
       }));
       setProgress(null);
-      if (anotherMode) setAutoAnalyze(true); // "Capture & Compare": analyze as soon as the capture is done
+      setAutoAnalyze(true); // "Capture & Compare": analyze as soon as the capture is done
       setAnotherMode(false);
       loadComparisons(); // the server may have saved the previous report to history
       window.scrollTo({ top: 0 });
@@ -159,6 +163,12 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
     }
   }, [autoAnalyze, test?.status]);
 
+  // Ask the AI again for the changed pages that have no AI analysis. Throws if the server refuses.
+  async function retryAiAnalysis() {
+    const data = await retryAi(testId);
+    setTest((current) => ({ ...current, results: data.results }));
+  }
+
   async function viewComparison(comparisonId) {
     setViewingId(comparisonId);
     setHistoryError('');
@@ -174,31 +184,57 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
     }
   }
 
-  return (
-    <div className="content">
-      <button className="link-button back-link" onClick={onBack}>&larr; Back to Test History</button>
+  // What is running right now, if anything. After "Capture & Compare" the analysis starts by itself, so the
+  // short moment between the two is shown as the analysis too (no flash of the Analyze button).
+  const workKind =
+    test?.status === 'capturing_baseline' ? 'baseline'
+    : test?.status === 'capturing_current' ? 'current'
+    : test?.status === 'analyzing' || (autoAnalyze && test?.status === 'current_captured') ? 'analysis'
+    : null;
+  const baselineReady = capturedPages(test?.baseline_pages).length > 0;
+  const currentReady = capturedPages(test?.current_pages).length > 0;
 
-      {loading && <p className="muted">Loading test...</p>}
-      {error && <p className="banner banner-error" role="alert">{error}</p>}
+  const analysisVisible = !anotherMode && (currentReady || workKind === 'analysis');
+  const showReport = test?.status === 'completed' && !workKind && !anotherMode && !viewing;
+
+  return (
+    <div className="detail">
+      <button className="back-link" onClick={onBack}><ArrowLeft size={15} aria-hidden="true" /> Test History</button>
+
+      {loading && !test && <SkeletonRows count={2} label="Loading test" />}
+      {error && (
+        <ErrorState
+          title="Unable to load this test."
+          text={error}
+          onRetry={error === 'This test no longer exists.' ? onBack : () => setReloadKey((value) => value + 1)}
+          retryLabel={error === 'This test no longer exists.' ? 'Back to tests' : 'Retry'}
+        />
+      )}
 
       {test && (
         <>
           {notice && test.status === 'created' && <p className="banner banner-success">{notice}</p>}
 
-          <div className="detail-header">
-            <div>
-              <h1 className="test-url">{test.baseline_url}</h1>
-              <span className={`badge badge-${statusTone(test.status)}`}>{statusLabel(test.status)}</span>
+          <header className="detail-head">
+            <div className="detail-title">
+              <h1 className="detail-url">{test.baseline_url}</h1>
+              <div className="detail-meta">
+                <StatusBadge status={test.status} />
+                <span>Created {formatDate(test.created_at)}</span>
+                {test.current_url && <span>Current: <span className="mono">{test.current_url}</span></span>}
+              </div>
             </div>
-            <button
-              className="btn btn-outline"
+            <Button
+              variant="danger"
+              size="sm"
+              icon={Trash2}
               onClick={() => onDelete(test)}
               disabled={isRunning(test.status)}
               title={isRunning(test.status) ? 'Wait for the running job to finish' : undefined}
             >
-              Delete Test
-            </button>
-          </div>
+              Delete
+            </Button>
+          </header>
 
           {connectionLost && isRunning(test.status) && (
             <p className="banner banner-warning" role="alert">
@@ -206,23 +242,12 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
             </p>
           )}
 
-          <dl className="detail-list panel">
-            <dt>Test ID</dt>
-            <dd className="mono">{test.id}</dd>
-            <dt>Baseline URL</dt>
-            <dd>{test.baseline_url}</dd>
-            <dt>Current URL</dt>
-            <dd>{test.current_url || 'Not set yet'}</dd>
-            <dt>Status</dt>
-            <dd>{statusLabel(test.status)}</dd>
-            <dt>Created</dt>
-            <dd>{formatDate(test.created_at)}</dd>
-          </dl>
+          <Stepper test={test} />
 
           {viewing ? (
             // An older, saved report. Nothing is recomputed.
             <>
-              <button className="link-button back-link" onClick={() => setViewing(null)}>&larr; Back to the latest comparison</button>
+              <button className="back-link" onClick={() => setViewing(null)}><ArrowLeft size={15} aria-hidden="true" /> Latest comparison</button>
               <ComparisonReport
                 baselineUrl={test.baseline_url}
                 currentUrl={viewing.current_url}
@@ -232,43 +257,56 @@ function TestDetail({ testId, notice, onBack, onDelete }) {
             </>
           ) : (
             <>
-              <BaselineCapture
-                test={test}
-                progress={progress}
-                starting={starting}
-                startError={startError}
-                onCapture={startCapture}
-              />
-
-              {/* Only after the baseline exists. The baseline stays visible above while this runs. */}
-              {capturedPages(test.baseline_pages).length > 0 && (
-                <CurrentCapture
-                  key={anotherMode ? 'another' : 'main'}
+              {/* One connected workflow: baseline, then the current deployment, then the analysis */}
+              <div className={showReport ? 'flow flow-compact' : 'flow'}>
+                <BaselineCapture
                   test={test}
-                  progress={progress}
                   starting={starting}
                   startError={startError}
-                  onCapture={startCurrentCapture}
-                  another={anotherMode}
-                  onCancel={() => setAnotherMode(false)}
-                />
-              )}
-
-              {/* Only after both captures exist. Analyze, then the report. Hidden while the form for another URL is open. */}
-              {!anotherMode && capturedPages(test.current_pages).length > 0 && (
-                <AnalysisPanel
-                  test={test}
+                  onCapture={startCapture}
+                  running={workKind === 'baseline'}
                   progress={progress}
-                  starting={starting}
-                  startError={startError}
-                  onAnalyze={startAnalysis}
-                  onCompareAnother={() => setAnotherMode(true)}
                 />
-              )}
 
-              {comparisons.length > 0 && (
-                <ComparisonHistory
+                {baselineReady && (
+                  <CurrentCapture
+                    key={anotherMode ? 'another' : 'main'}
+                    test={test}
+                    starting={starting}
+                    startError={startError}
+                    onCapture={startCurrentCapture}
+                    another={anotherMode}
+                    onCancel={() => setAnotherMode(false)}
+                    running={workKind === 'current'}
+                    progress={progress}
+                  />
+                )}
+
+                {analysisVisible && (
+                  <AnalysisPanel
+                    test={test}
+                    starting={starting}
+                    startError={startError}
+                    onAnalyze={startAnalysis}
+                    running={workKind === 'analysis'}
+                    progress={progress}
+                  />
+                )}
+              </div>
+
+              {showReport && (
+                <ComparisonReport
                   baselineUrl={test.baseline_url}
+                  currentUrl={test.current_url}
+                  results={test.results}
+                  pdfPath={`/tests/${test.id}/report.pdf`}
+                  onCompareAnother={() => { setAnotherMode(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  onRetryAi={retryAiAnalysis}
+                />
+              )}
+
+              {comparisons.length > 0 && !anotherMode && !workKind && (
+                <ComparisonHistory
                   comparisons={comparisons}
                   loadingId={viewingId}
                   error={historyError}

@@ -1,0 +1,312 @@
+/* Edith, the assistant: glass, like the home and sign-in screens. Sits bottom right on every screen. */
+
+.edith {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #fff;
+}
+
+.edith-launcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px 0 8px;
+  border-radius: 999px;
+  background: rgba(10, 10, 14, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.edith-launcher:hover {
+  transform: translateY(-2px);
+  background: rgba(24, 24, 32, 0.6);
+}
+
+.edith-launcher:active {
+  transform: scale(0.97);
+}
+
+.edith-launcher:focus-visible,
+.edith-close:focus-visible,
+.edith-form button:focus-visible,
+.edith-suggestions button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.edith-avatar {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px -4px rgba(255, 140, 110, 0.6);
+}
+
+.edith-avatar-launcher {
+  width: 32px;
+  height: 32px;
+}
+
+.edith-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100vw - 32px));
+  height: min(540px, calc(100dvh - 120px));
+  border-radius: 22px;
+  background: rgba(8, 8, 12, 0.62);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  transform-origin: bottom right;
+}
+
+.edith-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.edith-head > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.edith-head strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.edith-head span {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.76rem;
+}
+
+.edith-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.edith-close:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.edith-close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.edith-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.edith-msg {
+  max-width: 86%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  animation: edith-in 0.35s ease-out both;
+}
+
+.edith-assistant {
+  align-self: flex-start;
+  border-bottom-left-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.edith-user {
+  align-self: flex-end;
+  border-bottom-right-radius: 5px;
+  background: #fff;
+  color: #000;
+}
+
+.edith-error {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
+}
+
+@keyframes edith-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+
+.edith-typing {
+  display: inline-flex;
+  gap: 5px;
+  padding: 14px 16px;
+}
+
+.edith-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  animation: edith-dot 1.2s ease-in-out infinite;
+}
+
+.edith-typing i:nth-child(2) { animation-delay: 0.15s; }
+.edith-typing i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes edith-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
+.edith-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: rgba(255, 255, 255, 0.8);
+  animation: edith-blink 0.8s steps(2) infinite;
+}
+
+@keyframes edith-blink {
+  50% { opacity: 0; }
+}
+
+.edith-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.edith-suggestions button {
+  padding: 7px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.edith-suggestions button:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.edith-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 12px;
+  padding: 5px 5px 5px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.2s;
+}
+
+.edith-form:focus-within {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.edith-form input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.edith-form input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.edith-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.edith-form button:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+
+.edith-form button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .edith {
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .edith-launcher-label {
+    display: none;
+  }
+
+  .edith-launcher {
+    padding: 0 8px;
+  }
+
+  .edith-panel {
+    height: min(520px, calc(100dvh - 96px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edith-msg,
+  .edith-typing i,
+  .edith-caret {
+    animation: none;
+  }
+}
