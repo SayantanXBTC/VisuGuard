@@ -4,6 +4,7 @@ import { supabaseConfigured } from './supabase.js';
 import { requireUser } from './auth.js';
 import { STORAGE_DIR } from './screenshotter.js';
 import testsRouter from './routes/tests.js';
+import comparisonsRouter from './routes/comparisons.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -22,6 +23,7 @@ app.get('/api/health', (req, res) => {
 
 // Test management. requireUser rejects requests without a valid Supabase token.
 app.use('/api/tests', requireUser, testsRouter);
+app.use('/api/comparisons', requireUser, comparisonsRouter);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Not found.' });

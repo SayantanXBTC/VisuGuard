@@ -4,8 +4,9 @@ import { capturedPages, failedPages, pageCountText, isValidHttpUrl } from '../he
 
 // "Compare with a new deployment": the current URL form, the capture progress and the current screenshots.
 // Only shown after the baseline was captured.
-function CurrentCapture({ test, progress, starting, startError, onCapture }) {
-  const [currentUrl, setCurrentUrl] = useState(test.current_url || '');
+// another: "Compare Another URL" - the same form, for a second deployment. The baseline is only shown, never asked for.
+function CurrentCapture({ test, progress, starting, startError, onCapture, another = false, onCancel }) {
+  const [currentUrl, setCurrentUrl] = useState(another ? '' : test.current_url || '');
   const [urlError, setUrlError] = useState('');
   const [showPages, setShowPages] = useState(false);
 
@@ -14,7 +15,8 @@ function CurrentCapture({ test, progress, starting, startError, onCapture }) {
   const failed = failedPages(pages);
 
   const capturing = test.status === 'capturing_current';
-  const canStart = test.status === 'baseline_captured' || test.status === 'failed'; // failed = the last current capture failed
+  // failed with no current screenshots = the last current capture failed. (failed WITH them = the analysis failed.)
+  const canStart = another || test.status === 'baseline_captured' || (test.status === 'failed' && captured.length === 0);
   const finished = captured.length > 0 && !capturing && !canStart;
 
   function handleSubmit(event) {
@@ -27,11 +29,11 @@ function CurrentCapture({ test, progress, starting, startError, onCapture }) {
 
   return (
     <section className="panel">
-      <h2>Compare with a new deployment</h2>
+      <h2>{another ? 'Compare Another Deployment' : 'Compare with a new deployment'}</h2>
 
       {canStart && (
         <form onSubmit={handleSubmit} noValidate>
-          {test.status === 'failed' && (
+          {test.status === 'failed' && !another && (
             <p className="banner banner-error" role="alert">
               <strong>Current capture failed.</strong>
               <br />
@@ -40,10 +42,22 @@ function CurrentCapture({ test, progress, starting, startError, onCapture }) {
           )}
           {(urlError || startError) && <p className="banner banner-error" role="alert">{urlError || startError}</p>}
 
-          <p className="muted">
-            Enter the URL of the newer version of your website. VisuGuard visits the same pages it captured in the
-            baseline, on this URL, so the two versions can be compared.
-          </p>
+          {another ? (
+            <>
+              <p>
+                Baseline: <strong>{test.baseline_url}</strong>
+              </p>
+              <p className="muted">
+                The baseline stays as it is and is not captured again. Enter another deployment to compare against it.
+                The previous report is kept in the comparison history.
+              </p>
+            </>
+          ) : (
+            <p className="muted">
+              Enter the URL of the newer version of your website. VisuGuard visits the same pages it captured in the
+              baseline, on this URL, so the two versions can be compared.
+            </p>
+          )}
           <label className="field">
             Current URL
             <input
@@ -53,9 +67,14 @@ function CurrentCapture({ test, progress, starting, startError, onCapture }) {
               placeholder="https://staging.example.com"
             />
           </label>
-          <button type="submit" className="btn btn-primary" disabled={starting}>
-            {starting ? 'Starting...' : test.status === 'failed' ? 'Try Again' : 'Capture Current'}
-          </button>
+          <div className="button-row">
+            <button type="submit" className="btn btn-primary" disabled={starting}>
+              {starting ? 'Starting...' : another ? 'Capture & Compare' : test.status === 'failed' ? 'Try Again' : 'Capture Current'}
+            </button>
+            {another && (
+              <button type="button" className="btn btn-outline" onClick={onCancel} disabled={starting}>Cancel</button>
+            )}
+          </div>
         </form>
       )}
 

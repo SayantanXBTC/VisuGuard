@@ -12,6 +12,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.1",
     "express": "^5.2.1",
-    "playwright": "^1.63.0"
+    "pdfkit": "^0.20.2",
+    "playwright": "^1.63.0",
+    "resemblejs": "^5.0.0"
   }
 }

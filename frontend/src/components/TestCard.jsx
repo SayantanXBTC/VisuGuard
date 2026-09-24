@@ -9,6 +9,7 @@ function TestCard({ test, onOpen, onDelete }) {
         <span className="test-meta">
           <span className={`badge badge-${statusTone(test.status)}`}>{statusLabel(test.status)}</span>
           <span>Created {formatDate(test.created_at)}</span>
+          {test.pages_tested !== null && <span>{test.pages_changed} of {test.pages_tested} pages changed</span>}
           <span>ID {shortId(test.id)}</span>
         </span>
         {test.current_url && <span className="test-meta">Current: {test.current_url}</span>}
