@@ -37,8 +37,9 @@ function App() {
       setSession(newSession);
       if (event === 'PASSWORD_RECOVERY') setView('reset');
       if (event === 'SIGNED_OUT') setView('landing');
-      // Only move to the dashboard if the user was on the Auth page
-      if (event === 'SIGNED_IN') setView((current) => (current === 'auth' ? 'dashboard' : current));
+      // Move to the dashboard on sign-in, whether from the Auth page or a full-page OAuth
+      // redirect back from Google (which reloads the app fresh, so `view` is never 'auth' then).
+      if (event === 'SIGNED_IN') setView((current) => (current === 'reset' ? current : 'dashboard'));
     });
 
     // Returning user, or back from Google: go straight to the dashboard
