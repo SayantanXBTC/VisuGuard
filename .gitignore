@@ -1,0 +1,9 @@
+node_modules/
+.env
+.DS_Store
+
+# screenshots created at runtime
+backend/storage/
+
+# frontend build output
+frontend/dist/
