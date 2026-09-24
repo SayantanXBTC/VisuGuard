@@ -3,7 +3,9 @@ import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, use
 import { AlertTriangle, ArrowRight, ChevronLeft, ChevronRight, Download, GitCompareArrows, Maximize2, RotateCw, Sparkles, X } from 'lucide-react';
 import { downloadPdf } from '../api.js';
 import { formatDate, hostOf } from '../helpers.js';
+import { useImageLoad } from '../useImageLoad.js';
 import CompareSlider from './CompareSlider.jsx';
+import ImageFailed from './ImageFailed.jsx';
 import { Badge, Button } from './ui.jsx';
 
 const STATUS_LABEL = {
@@ -154,8 +156,7 @@ function Findings({ page }) {
 // One screenshot in a dark frame. Tall pages scroll inside the frame. Click (or the button) to see it full screen.
 // A shimmering skeleton fills the frame until the image has actually loaded.
 function Frame({ label, src, onOpen }) {
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => setLoaded(false), [src]);
+  const { loaded, failed, retry, imgProps } = useImageLoad(src);
 
   if (!src) return <div className="frame-empty">No {label.toLowerCase()} image</div>;
   return (
@@ -164,16 +165,18 @@ function Frame({ label, src, onOpen }) {
       <div className="frame" style={loaded ? undefined : { minHeight: 320, position: 'relative' }}>
         {!loaded && (
           <div className="screenshot-skeleton">
-            <span className="skeleton-shimmer" aria-hidden="true" />
+            {failed ? (
+              <ImageFailed onRetry={retry} />
+            ) : (
+              <span className="skeleton-shimmer" aria-hidden="true" />
+            )}
           </div>
         )}
         <img
-          src={src}
+          {...imgProps}
           alt={label}
-          loading="lazy"
           onClick={() => onOpen(src, label)}
           style={{ opacity: loaded ? 1 : 0 }}
-          onLoad={() => setLoaded(true)}
         />
       </div>
       <button className="frame-open" onClick={() => onOpen(src, label)} aria-label={`Enlarge ${label}`} title="Enlarge">

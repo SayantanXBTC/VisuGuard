@@ -64,10 +64,11 @@ const REPORT_PAGES = [
 const AUTO_VIEWS = ['baseline', 'current', 'diff'];
 const HOLD_MS = 2200;
 
-// Fades a block in; `order` staggers the blocks one after another
+// Fades a block in; `order` staggers the blocks one after another. The first block waits a beat
+// so the scroll-snap settles before anything starts moving.
 function Step({ order, className = '', children }) {
   return (
-    <div className={`animate-blur-fade-up ${className}`} style={{ animationDelay: `${order * 100}ms` }}>
+    <div className={`animate-panel-in ${className}`} style={{ animationDelay: `${300 + order * 400}ms` }}>
       {children}
     </div>
   );
