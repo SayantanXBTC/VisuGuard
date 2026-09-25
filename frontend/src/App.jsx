@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from './supabaseClient.js';
 import { getSession, onAuthChange, signOut } from './auth.js';
 import Landing from './pages/Landing.jsx';
@@ -18,12 +18,21 @@ function originOf(event) {
 
 const REVEAL_MS = 1500; // how long the landing page stays under the sign-in screen while it opens
 
-// No router: `view` says which screen to show.
+// `view` says which screen to show; each maps to a real URL path so the
+// address bar, refresh, and back/forward all match what's on screen.
 // view is one of: 'landing' | 'auth' | 'dashboard' | 'reset'
+const PATH_BY_VIEW = { landing: '/', auth: '/auth', dashboard: '/dashboard', reset: '/reset-password' };
+const VIEW_BY_PATH = { '/': 'landing', '/auth': 'auth', '/dashboard': 'dashboard', '/reset-password': 'reset' };
+
+function viewForPath(pathname) {
+  return VIEW_BY_PATH[pathname] || 'landing';
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true); // true until we know if someone is logged in
-  const [view, setView] = useState(cameFromResetEmail ? 'reset' : 'landing');
+  const [view, setView] = useState(cameFromResetEmail ? 'reset' : viewForPath(window.location.pathname));
+  const firstUrlSync = useRef(true);
   const [authMode, setAuthMode] = useState('signin'); // which tab the Auth page opens on
   const [notice, setNotice] = useState('');
   const [reveal, setReveal] = useState(null); // { x, y } while the sign-in screen opens over the landing page
@@ -58,6 +67,30 @@ function App() {
     const timer = setTimeout(() => setLandingBehind(false), REVEAL_MS);
     return () => clearTimeout(timer);
   }, [landingBehind]);
+
+  // Keep the address bar in sync with `view` (/dashboard, /auth, ...)
+  useEffect(() => {
+    const path = PATH_BY_VIEW[view];
+    if (window.location.pathname === path) return;
+    if (firstUrlSync.current) {
+      window.history.replaceState({ view }, '', path);
+    } else {
+      window.history.pushState({ view }, '', path);
+    }
+  }, [view]);
+
+  useEffect(() => {
+    firstUrlSync.current = false;
+  }, []);
+
+  // Back/forward buttons: move to whatever view the URL now points at
+  useEffect(() => {
+    function onPopState() {
+      setView(viewForPath(window.location.pathname));
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   function goToAuth(mode, event) {
     setAuthMode(mode);

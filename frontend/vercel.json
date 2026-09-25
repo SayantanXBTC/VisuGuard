@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://visuguard-backend-production.up.railway.app/api/:path*" },
-    { "source": "/files/:path*", "destination": "https://visuguard-backend-production.up.railway.app/files/:path*" }
+    { "source": "/files/:path*", "destination": "https://visuguard-backend-production.up.railway.app/files/:path*" },
+    { "source": "/((?!api|files).*)", "destination": "/index.html" }
   ]
 }
