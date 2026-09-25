@@ -84,7 +84,10 @@ function Edith() {
       if (openRef.current) return;
       clearTimeout(hideTimer.current);
       setGreeting({ ...message, key: Date.now() });
-      hideTimer.current = setTimeout(() => setGreeting(null), message.celebrate ? SHOW_MS + 1500 : SHOW_MS);
+      // A message can ask to stay out longer than the default (holdMs) - the landing page's first
+      // hello does, so it has time to read before hopping back.
+      const holdMs = message.holdMs ?? (message.celebrate ? SHOW_MS + 1500 : SHOW_MS);
+      hideTimer.current = setTimeout(() => setGreeting(null), holdMs);
     });
     return () => {
       stop();

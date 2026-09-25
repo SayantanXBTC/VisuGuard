@@ -51,7 +51,7 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
   const scrollRef = useRef(null);
 
   useEdithGreeting(
-    { once: 'welcome', title: "Welcome! I'm Edith.", text: "If you need any help, I'm right here." },
+    { once: 'welcome', title: "Welcome! I'm Edith.", text: "If you need any help, I'm right here.", holdMs: 10000 },
     true,
     1400,
   );
