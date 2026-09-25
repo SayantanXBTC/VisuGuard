@@ -121,7 +121,7 @@ export default function Landing({ loggedIn, notice, onGetStarted, onSignIn, onGo
       />
 
       {showNotice && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-blur-fade-up">
+        <div className="fixed top-20 md:top-28 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-2rem)] animate-blur-fade-up">
           <div className="flex items-center gap-2 px-4 py-2 rounded-full liquid-glass text-xs font-medium text-emerald-300 shadow-xl">
             <CheckCircle2 size={15} />
             <span>{notice}</span>

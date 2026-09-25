@@ -2922,6 +2922,10 @@
   .report-rail.panel {
     position: relative;
     top: auto;
+    /* Without this, the grid track sizes to the rail's horizontally-scrolling
+       content (six 170px items) instead of the viewport, and the whole report
+       pushes off-screen to the right. */
+    min-width: 0;
     max-height: none;
   }
 
@@ -3683,6 +3687,45 @@
   .profile-popover {
     right: -6px;
     width: min(250px, 86vw);
+  }
+}
+
+/* Narrow phones (iPhone SE and similar, ~380px and below): the topbar's four
+   groups (brand, tabs, New Test, profile) no longer fit even with the 640px
+   trims above, and "Test History" wraps onto two lines and pushes the
+   profile avatar off the right edge. Tighten spacing further. */
+@media (max-width: 380px) {
+  .topbar-inner {
+    gap: 4px;
+    padding: 0 10px;
+  }
+
+  .topbar-tabs {
+    gap: 0;
+  }
+
+  .topbar-tab {
+    padding: 7px 8px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .topbar-right {
+    gap: 6px;
+  }
+
+  .profile-button {
+    gap: 0;
+    padding: 3px;
+  }
+
+  .profile-chevron {
+    display: none;
+  }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
   }
 }
 
